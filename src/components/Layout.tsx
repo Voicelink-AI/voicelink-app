@@ -90,7 +90,34 @@ export default function Layout({ children, currentPage, onNavigate }: LayoutProp
 
       {/* Main Content */}
       <div className="main-content">
-        <header className="header">
+        {/* Modern API Status Bar */}
+        <div className="fixed top-0 left-0 w-screen z-50">
+          <div className="api-status-bar flex items-center justify-between px-6 py-3"
+            style={{
+              background: 'linear-gradient(90deg, #3B82F6 0%, #10B981 100%)',
+              color: 'white',
+              fontWeight: 600,
+              fontSize: '1rem',
+              letterSpacing: '0.02em',
+              boxShadow: '0 2px 8px rgba(59,130,246,0.08)',
+              width: '100vw',
+              minHeight: '48px',
+            }}
+          >
+            <div className="flex items-center gap-3">
+              <span className="text-lg">🔗</span>
+              <span>API Status:</span>
+              <span className={`rounded px-3 py-1 font-mono text-xs ${apiStatus === 'connected' ? 'bg-green-600' : apiStatus === 'connecting' ? 'bg-yellow-500' : 'bg-red-500'}`}>
+                {apiStatus === 'connected' ? 'Connected' : apiStatus === 'connecting' ? 'Connecting...' : 'Disconnected'}
+              </span>
+            </div>
+            <div className="hidden md:flex items-center gap-4">
+              <span className="text-xs opacity-80">VoiceLink v1.0</span>
+            </div>
+          </div>
+        </div>
+
+        <header className="header" style={{ marginTop: '56px' }}>
           <div className="flex items-center gap-3">
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}

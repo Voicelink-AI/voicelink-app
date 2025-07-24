@@ -61,7 +61,7 @@ export default function LiveMeetingRoom({ meetingId }: LiveMeetingRoomProps) {
 
   const loadLiveTranscript = async () => {
     try {
-      const data = await VoiceLinkAPI.getLiveTranscript(meetingId);
+      const data = await VoiceLinkAPI.getTranscript(meetingId);
       if (data.transcript_segments && Array.isArray(data.transcript_segments)) {
         setTranscript(data.transcript_segments);
       } else {
@@ -277,7 +277,7 @@ export default function LiveMeetingRoom({ meetingId }: LiveMeetingRoomProps) {
                   meeting.participants.map((participant, index) => (
                     <div key={index} className="flex items-center text-sm text-gray-600">
                       <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
-                      {participant}
+                      {participant.email}
                     </div>
                   ))
                 ) : (

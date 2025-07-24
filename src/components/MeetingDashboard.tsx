@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { VoiceLinkAPI, type MeetingResponse, type MeetingCreateRequest } from '../services/api';
+import CreateMeetingModal from './CreateMeetingModal';
+import MeetingDetailsModal from './MeetingDetailsModal';
 
 export default function MeetingDashboard() {
   const [meetings, setMeetings] = useState<MeetingResponse[]>([]);
@@ -20,6 +22,7 @@ export default function MeetingDashboard() {
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load meetings');
+      console.error('Failed to load meetings:', err);
     } finally {
       setLoading(false);
     }
@@ -32,24 +35,68 @@ export default function MeetingDashboard() {
       setShowCreateForm(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create meeting');
+      console.error('Failed to create meeting:', err);
+      throw err; // Re-throw to let modal handle the error
     }
   };
 
   const handleStartMeeting = async (meetingId: string) => {
     try {
+      console.log('🚀 Starting meeting:', meetingId);
       await VoiceLinkAPI.startMeeting(meetingId);
       await loadMeetings();
+      console.log('✅ Meeting started successfully');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start meeting');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to start meeting';
+      setError(errorMessage);
+      console.error('Failed to start meeting:', err);
+
+      if (errorMessage.includes('404') || errorMessage.includes('not found')) {
+        setError('Meeting start functionality is not yet implemented in the backend');
+      }
     }
   };
 
   const handleEndMeeting = async (meetingId: string) => {
     try {
+      console.log('⏹️ Ending meeting:', meetingId);
       await VoiceLinkAPI.endMeeting(meetingId);
       await loadMeetings();
+      console.log('✅ Meeting ended successfully');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to end meeting');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to end meeting';
+      setError(errorMessage);
+      console.error('Failed to end meeting:', err);
+
+      if (errorMessage.includes('404') || errorMessage.includes('not found')) {
+        setError('Meeting end functionality is not yet implemented in the backend');
+      }
+    }
+  };
+
+  const handlePauseMeeting = async (meetingId: string) => {
+    try {
+      console.log('⏸️ Pausing meeting:', meetingId);
+      await VoiceLinkAPI.pauseMeeting(meetingId);
+      await loadMeetings();
+      console.log('✅ Meeting paused successfully');
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to pause meeting';
+      setError(errorMessage);
+      console.error('Failed to pause meeting:', err);
+    }
+  };
+
+  const handleResumeMeeting = async (meetingId: string) => {
+    try {
+      console.log('▶️ Resuming meeting:', meetingId);
+      await VoiceLinkAPI.resumeMeeting(meetingId);
+      await loadMeetings();
+      console.log('✅ Meeting resumed successfully');
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to resume meeting';
+      setError(errorMessage);
+      console.error('Failed to resume meeting:', err);
     }
   };
 
@@ -83,6 +130,12 @@ export default function MeetingDashboard() {
             <div className="ml-3">
               <h3 className="text-sm font-medium text-red-800">Error</h3>
               <p className="mt-1 text-sm text-red-700">{error}</p>
+              <button 
+                onClick={() => setError(null)}
+                className="mt-2 text-xs text-red-600 hover:text-red-800 underline"
+              >
+                Dismiss
+              </button>
             </div>
           </div>
         </div>
@@ -98,7 +151,9 @@ export default function MeetingDashboard() {
           <option value="">All Meetings</option>
           <option value="scheduled">Scheduled</option>
           <option value="active">Active</option>
+          <option value="paused">Paused</option>
           <option value="completed">Completed</option>
+          <option value="cancelled">Cancelled</option>
         </select>
         
         <button
@@ -112,12 +167,14 @@ export default function MeetingDashboard() {
       {/* Meetings Grid */}
       {meetings.length > 0 ? (
         <div className="meetings-grid">
-          {meetings.map((meeting) => (
+          {meetings.map((meeting, index) => (
             <MeetingCard
-              key={meeting.id}
+              key={meeting.meeting_id || index}
               meeting={meeting}
-              onStart={() => handleStartMeeting(meeting.id)}
-              onEnd={() => handleEndMeeting(meeting.id)}
+              onStart={() => handleStartMeeting(meeting.meeting_id)}
+              onEnd={() => handleEndMeeting(meeting.meeting_id)}
+              onPause={() => handlePauseMeeting(meeting.meeting_id)}
+              onResume={() => handleResumeMeeting(meeting.meeting_id)}
             />
           ))}
         </div>
@@ -152,14 +209,37 @@ interface MeetingCardProps {
   meeting: MeetingResponse;
   onStart: () => void;
   onEnd: () => void;
+  onPause: () => void;
+  onResume: () => void;
 }
 
-function MeetingCard({ meeting, onStart, onEnd }: MeetingCardProps) {
+function MeetingCard({ meeting, onStart, onEnd, onPause, onResume }: MeetingCardProps) {
+  const [showDetails, setShowDetails] = useState(false);
+  const [meetingDetails, setMeetingDetails] = useState<any>(null);
+  const [loadingDetails, setLoadingDetails] = useState(false);
+
+  const handleViewDetails = async () => {
+    try {
+      setLoadingDetails(true);
+      const details = await VoiceLinkAPI.getMeeting(meeting.meeting_id);
+      setMeetingDetails(details);
+      setShowDetails(true);
+    } catch (error) {
+      console.error('Failed to load meeting details:', error);
+      setMeetingDetails(meeting);
+      setShowDetails(true);
+    } finally {
+      setLoadingDetails(false);
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'active': return 'bg-green-100 text-green-800';
       case 'scheduled': return 'bg-blue-100 text-blue-800';
+      case 'paused': return 'bg-yellow-100 text-yellow-800';
       case 'completed': return 'bg-gray-100 text-gray-800';
+      case 'cancelled': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
@@ -169,163 +249,86 @@ function MeetingCard({ meeting, onStart, onEnd }: MeetingCardProps) {
     return new Date(timeString).toLocaleString();
   };
 
-  return (
-    <div className="meeting-card">
-      <div className="meeting-header">
-        <h3 className="meeting-title">{meeting.title}</h3>
-        <span className={`status-badge ${getStatusColor(meeting.status)}`}>
-          {meeting.status}
-        </span>
-      </div>
-
-      <div className="meeting-meta">
-        <p className="meta-item">
-          👥 {meeting.participants.length} participants
-        </p>
-        {meeting.scheduled_time && (
-          <p className="meta-item">
-            📅 {formatTime(meeting.scheduled_time)}
-          </p>
-        )}
-        {meeting.start_time && (
-          <p className="meta-item">
-            ▶️ Started: {formatTime(meeting.start_time)}
-          </p>
-        )}
-      </div>
-
-      {meeting.description && (
-        <div className="meeting-summary">
-          <p>{meeting.description}</p>
-        </div>
-      )}
-
-      <div className="meeting-actions">
-        {meeting.status === 'scheduled' && (
+  const getActionButtons = () => {
+    switch (meeting.status) {
+      case 'scheduled':
+        return (
           <button onClick={onStart} className="btn btn-primary">
             ▶️ Start Meeting
           </button>
-        )}
-        
-        {meeting.status === 'active' && (
-          <button onClick={onEnd} className="btn btn-secondary">
-            ⏹️ End Meeting
-          </button>
-        )}
-        
-        <button className="btn btn-secondary">
-          👁️ View Details
-        </button>
-      </div>
-    </div>
-  );
-}
-
-interface CreateMeetingModalProps {
-  onSubmit: (data: MeetingCreateRequest) => void;
-  onClose: () => void;
-}
-
-function CreateMeetingModal({ onSubmit, onClose }: CreateMeetingModalProps) {
-  const [formData, setFormData] = useState<MeetingCreateRequest>({
-    title: '',
-    participants: [],
-    description: '',
-  });
-
-  const [participantInput, setParticipantInput] = useState('');
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    onSubmit(formData);
-  };
-
-  const addParticipant = () => {
-    if (participantInput.trim()) {
-      setFormData(prev => ({
-        ...prev,
-        participants: [...prev.participants, participantInput.trim()]
-      }));
-      setParticipantInput('');
+        );
+      case 'active':
+        return (
+          <>
+            <button onClick={onPause} className="btn btn-secondary">
+              ⏸️ Pause
+            </button>
+            <button onClick={onEnd} className="btn btn-secondary">
+              ⏹️ End Meeting
+            </button>
+          </>
+        );
+      case 'paused':
+        return (
+          <>
+            <button onClick={onResume} className="btn btn-primary">
+              ▶️ Resume
+            </button>
+            <button onClick={onEnd} className="btn btn-secondary">
+              ⏹️ End Meeting
+            </button>
+          </>
+        );
+      case 'completed':
+        return (
+          <div className="text-sm text-gray-500">Meeting completed</div>
+        );
+      default:
+        return null;
     }
   };
 
-  const removeParticipant = (index: number) => {
-    setFormData(prev => ({
-      ...prev,
-      participants: prev.participants.filter((_, i) => i !== index)
-    }));
-  };
-
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 w-full max-w-lg">
-        <h3 className="text-lg font-semibold mb-4">Create New Meeting</h3>
-        
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="form-group">
-            <label className="form-label">Meeting Title</label>
-            <input
-              type="text"
-              className="form-input"
-              value={formData.title}
-              onChange={(e) => setFormData(prev => ({...prev, title: e.target.value}))}
-              required
-            />
-          </div>
+    <>
+      <div className="meeting-card">
+        <div className="meeting-header">
+          <h3 className="meeting-title">{meeting.title}</h3>
+          <span className={`status-badge ${getStatusColor(meeting.status)}`}>
+            {meeting.status}
+          </span>
+        </div>
 
-          <div className="form-group">
-            <label className="form-label">Description</label>
-            <textarea
-              className="form-input"
-              rows={3}
-              value={formData.description}
-              onChange={(e) => setFormData(prev => ({...prev, description: e.target.value}))}
-            />
-          </div>
+        <div className="meeting-meta">
+          <p className="meta-item">
+            👥 {meeting.participants.length} participants
+          </p>
+          {meeting.start_time && (
+            <p className="meta-item">
+              📅 {formatTime(meeting.start_time)}
+            </p>
+          )}
+        </div>
 
-          <div className="form-group">
-            <label className="form-label">Participants</label>
-            <div className="flex gap-2 mb-2">
-              <input
-                type="email"
-                className="form-input flex-1"
-                placeholder="participant@example.com"
-                value={participantInput}
-                onChange={(e) => setParticipantInput(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addParticipant())}
-              />
-              <button type="button" onClick={addParticipant} className="btn btn-secondary">
-                Add
-              </button>
-            </div>
-            
-            <div className="space-y-1">
-              {formData.participants.map((participant, index) => (
-                <div key={index} className="flex items-center justify-between bg-gray-50 p-2 rounded">
-                  <span className="text-sm">{participant}</span>
-                  <button
-                    type="button"
-                    onClick={() => removeParticipant(index)}
-                    className="text-red-500 hover:text-red-700"
-                  >
-                    ❌
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex gap-3 pt-4">
-            <button type="submit" className="btn btn-primary flex-1">
-              Create Meeting
-            </button>
-            <button type="button" onClick={onClose} className="btn btn-secondary">
-              Cancel
-            </button>
-          </div>
-        </form>
+        <div className="meeting-actions">
+          {getActionButtons()}
+          
+          <button 
+            onClick={handleViewDetails}
+            disabled={loadingDetails}
+            className="btn btn-secondary"
+          >
+            {loadingDetails ? '⏳' : '👁️'} View Details
+          </button>
+        </div>
       </div>
-    </div>
+
+      {/* Modern Meeting Details Modal */}
+      {showDetails && meetingDetails && (
+        <MeetingDetailsModal
+          meeting={meetingDetails}
+          onClose={() => setShowDetails(false)}
+        />
+      )}
+    </>
   );
 }

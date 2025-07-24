@@ -7,6 +7,7 @@ export default function Dashboard() {
   const [analytics, setAnalytics] = useState<AnalyticsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [recentMeetingId, setRecentMeetingId] = useState<string | null>(null);
 
   useEffect(() => {
     loadDashboardData();
@@ -20,25 +21,35 @@ export default function Dashboard() {
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load dashboard data');
-      // Set empty analytics if API fails
+      // Set empty analytics with correct structure if API fails
       setAnalytics({
         total_meetings: 0,
         total_participants: 0,
+        total_minutes_recorded: 0,
         total_speaking_time: 0,
-        active_meetings: 0
+        avg_meeting_duration: 0,
+        active_meetings: 0,
+        top_speakers: [],
+        sentiment_analysis: {},
+        word_cloud_data: []
       });
     } finally {
       setLoading(false);
     }
   };
 
-  const handleFileUpload = async (file: File) => {
+  const handleFileUpload = async (file: File, meetingId?: string) => {
     try {
-      await VoiceLinkAPI.uploadAudio(file);
-      // Refresh analytics after upload
+      console.log('📁 File uploaded:', file.name);
+      if (meetingId) {
+        console.log('📋 Meeting created:', meetingId);
+        setRecentMeetingId(meetingId);
+      }
+      
+      // Refresh analytics after upload and meeting creation
       await loadDashboardData();
     } catch (err) {
-      console.error('Failed to upload audio:', err);
+      console.error('Failed to handle file upload:', err);
     }
   };
 
@@ -74,25 +85,67 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Overview Stats - Show zeros if no real data */}
-      <div className="dashboard-stats">
-        <div className="stat-card">
-          <p className="stat-value">{analytics?.total_meetings || 0}</p>
-          <p className="stat-label">Total Meetings</p>
+      {/* Show recent meeting notification */}
+      {recentMeetingId && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <div className="text-blue-400 text-lg mr-3">🎉</div>
+              <div>
+                <h3 className="text-sm font-medium text-blue-800">Meeting Created!</h3>
+                <p className="text-sm text-blue-700">Your audio has been uploaded and a meeting record created.</p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => window.location.hash = `/meetings/${recentMeetingId}`}
+                className="btn btn-primary text-xs"
+              >
+                View Meeting
+              </button>
+              <button
+                onClick={() => setRecentMeetingId(null)}
+                className="text-blue-600 hover:text-blue-800 text-sm"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
         </div>
-        <div className="stat-card">
-          <p className="stat-value">{analytics?.total_participants || 0}</p>
-          <p className="stat-label">Total Participants</p>
+      )}
+
+      {/* Overview Stats */}
+      {loading ? (
+        <div className="dashboard-stats">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="stat-card">
+              <div className="animate-pulse">
+                <div className="h-8 bg-gray-200 rounded mb-2"></div>
+                <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+              </div>
+            </div>
+          ))}
         </div>
-        <div className="stat-card">
-          <p className="stat-value">{analytics ? Math.round(analytics.total_speaking_time / 60) : 0}h</p>
-          <p className="stat-label">Speaking Time</p>
+      ) : analytics ? (
+        <div className="dashboard-stats">
+          <div className="stat-card">
+            <p className="stat-value">{analytics.total_meetings}</p>
+            <p className="stat-label">Total Meetings</p>
+          </div>
+          <div className="stat-card">
+            <p className="stat-value">{analytics.total_participants}</p>
+            <p className="stat-label">Total Participants</p>
+          </div>
+          <div className="stat-card">
+            <p className="stat-value">{Math.round((analytics.total_minutes_recorded || analytics.total_speaking_time) / 60)}h</p>
+            <p className="stat-label">Speaking Time</p>
+          </div>
+          <div className="stat-card">
+            <p className="stat-value">{analytics.active_meetings}</p>
+            <p className="stat-label">Active Meetings</p>
+          </div>
         </div>
-        <div className="stat-card">
-          <p className="stat-value">{analytics?.active_meetings || 0}</p>
-          <p className="stat-label">Active Meetings</p>
-        </div>
-      </div>
+      ) : null}
 
       {/* Main Dashboard Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -100,38 +153,53 @@ export default function Dashboard() {
         <div className="lg:col-span-2">
           <AudioUploader onFileUpload={handleFileUpload} />
           
-          {/* Instructions */}
+          {/* Updated Instructions */}
           <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Getting Started</h3>
+            <h3 className="text-lg font-medium text-gray-900 mb-4">How VoiceLink Works</h3>
             <div className="space-y-4">
               <div className="flex items-start gap-3">
-                <div className="text-2xl">1️⃣</div>
+                <div className="text-2xl">📤</div>
                 <div>
                   <h4 className="font-medium text-gray-900">Upload Audio</h4>
-                  <p className="text-sm text-gray-600">Upload an audio file above to begin transcription</p>
+                  <p className="text-sm text-gray-600">Drag and drop or select an audio file to start</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
-                <div className="text-2xl">2️⃣</div>
+                <div className="text-2xl">📋</div>
+                <div>
+                  <h4 className="font-medium text-gray-900">Auto-Create Meeting</h4>
+                  <p className="text-sm text-gray-600">VoiceLink automatically creates a meeting record for your audio</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <div className="text-2xl">🤖</div>
                 <div>
                   <h4 className="font-medium text-gray-900">AI Processing</h4>
-                  <p className="text-sm text-gray-600">Your audio will be processed and analyzed</p>
+                  <p className="text-sm text-gray-600">Audio is transcribed and analyzed (when processing is enabled)</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
-                <div className="text-2xl">3️⃣</div>
+                <div className="text-2xl">💬</div>
                 <div>
-                  <h4 className="font-medium text-gray-900">Interactive Q&A</h4>
-                  <p className="text-sm text-gray-600">Ask questions about your content using the chat</p>
+                  <h4 className="font-medium text-gray-900">Interactive Chat</h4>
+                  <p className="text-sm text-gray-600">Ask questions about your meeting content using AI</p>
                 </div>
               </div>
             </div>
+            
+            {recentMeetingId && (
+              <div className="mt-4 pt-4 border-t border-gray-200">
+                <p className="text-sm text-green-600 font-medium">
+                  ✅ Your latest meeting is ready! Use the chat to ask questions about your audio.
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Right Column - Chat */}
+        {/* Right Column - Chat with meeting context */}
         <div className="space-y-6">
-          <ChatInterface />
+          <ChatInterface meetingId={recentMeetingId || undefined} />
           
           {/* System Status */}
           <div className="bg-white rounded-lg border border-gray-200 p-4">
@@ -143,8 +211,16 @@ export default function Dashboard() {
               </div>
               <div className="flex items-center justify-between text-sm">
                 <span className="text-gray-600">Speaking Time</span>
-                <span className="text-gray-900">{analytics ? Math.round(analytics.total_speaking_time / 60) : 0}h</span>
+                <span className="text-gray-900">
+                  {analytics ? Math.round((analytics.total_minutes_recorded || analytics.total_speaking_time) / 60) : 0}h
+                </span>
               </div>
+              {recentMeetingId && (
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-600">Latest Meeting</span>
+                  <span className="text-blue-600 text-xs font-mono">{recentMeetingId.slice(-8)}</span>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -198,6 +274,6 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
-    </div>
+  </div>
   );
 }

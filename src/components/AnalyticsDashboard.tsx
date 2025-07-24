@@ -25,7 +25,12 @@ export default function AnalyticsDashboard() {
         total_meetings: 0,
         total_participants: 0,
         total_speaking_time: 0,
-        active_meetings: 0
+        active_meetings: 0,
+        total_minutes_recorded: 0,
+        avg_meeting_duration: 0,
+        top_speakers: [],
+        sentiment_analysis: { positive: 0, negative: 0, neutral: 0 },
+        word_cloud_data: []
       });
     } finally {
       setLoading(false);

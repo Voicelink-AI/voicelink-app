@@ -1,4 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { VoiceLinkAPI } from '../services/api';
+import APIDebugger from './APIDebugger';
+import EndpointTester from './EndpointTester';
+import TestUploadComponent from './TestUploadComponent';
 
 interface SettingsState {
   apiSettings: {
@@ -251,6 +255,20 @@ export default function Settings() {
             />
           </div>
         )}
+      </div>
+
+      {/* API Debug Section */}
+      <div className="settings-section">
+        <h3>🔧 API Debugging & Testing</h3>
+        <p className="text-sm text-gray-600 mb-4">
+          Test VoiceLink API endpoints and complete workflows to diagnose issues.
+        </p>
+        
+        <div className="space-y-6">
+          <TestUploadComponent />
+          <APIDebugger />
+          <EndpointTester />
+        </div>
       </div>
 
       {/* Save Button */}
