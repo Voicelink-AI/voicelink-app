@@ -643,4 +643,25 @@ export class VoiceLinkAPI {
     const response = await fetch(`${API_BASE_URL}/meetings/${meetingId}/code-context`);
     return response.json();
   }
+
+  static async queryMeeting(meetingId: string, question: string): Promise<LLMResponse> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/meetings/${meetingId}/query`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ question }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to query meeting: ${response.status} ${response.statusText}`);
+      }
+
+      return response.json();
+    } catch (error) {
+      console.error('Query meeting error:', error);
+      throw error;
+    }
+  }
 }

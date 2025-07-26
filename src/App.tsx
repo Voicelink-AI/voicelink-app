@@ -3,6 +3,7 @@ import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
 import MeetingDashboard from './components/MeetingDashboard';
 import LiveMeetingRoom from './components/LiveMeetingRoom';
+import MeetingDetailView from './components/MeetingDetailView';
 import AnalyticsDashboard from './components/AnalyticsDashboard';
 import ChatInterface from './components/ChatInterface';
 import SystemMonitor from './components/SystemMonitor';
@@ -16,6 +17,11 @@ function App() {
   const [selectedMeetingId, setSelectedMeetingId] = useState<string | null>(null);
   const [systemHealth, setSystemHealth] = useState<'healthy' | 'degraded' | 'down'>('down');
   const [isConnecting, setIsConnecting] = useState(true);
+
+  const handleSelectMeeting = (meetingId: string) => {
+    setSelectedMeetingId(meetingId);
+    setCurrentPage('meeting-detail');
+  };
 
   useEffect(() => {
     checkSystemHealth();
@@ -42,7 +48,23 @@ function App() {
       case 'dashboard':
         return <Dashboard />;
       case 'meetings':
-        return <MeetingDashboard />;
+        return <MeetingDashboard onSelectMeeting={handleSelectMeeting} />;
+      case 'meeting-detail':
+        return selectedMeetingId ? (
+          <MeetingDetailView meetingId={selectedMeetingId} />
+        ) : (
+          <div className="text-center py-12">
+            <div className="text-4xl mb-4">📋</div>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No meeting selected</h3>
+            <p className="text-gray-500">Please select a meeting from the meetings page</p>
+            <button
+              onClick={() => setCurrentPage('meetings')}
+              className="btn btn-primary mt-4"
+            >
+              Go to Meetings
+            </button>
+          </div>
+        );
       case 'live-meeting':
         return selectedMeetingId ? (
           <LiveMeetingRoom meetingId={selectedMeetingId} />

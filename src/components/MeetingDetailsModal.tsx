@@ -106,6 +106,12 @@ export default function MeetingDetailsModal({ meeting, onClose }: MeetingDetails
         {/* Modal Footer */}
         <div className="modal-footer">
           <button 
+            onClick={() => window.location.hash = `/meeting-detail?id=${meeting.meeting_id}`}
+            className="btn btn-primary"
+          >
+            📋 Full Detail View
+          </button>
+          <button 
             onClick={() => window.location.hash = `/chat?meeting=${meeting.meeting_id}`}
             className="btn btn-primary"
           >

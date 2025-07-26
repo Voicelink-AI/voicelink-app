@@ -3,7 +3,11 @@ import { VoiceLinkAPI, type MeetingResponse, type MeetingCreateRequest } from '.
 import CreateMeetingModal from './CreateMeetingModal';
 import MeetingDetailsModal from './MeetingDetailsModal';
 
-export default function MeetingDashboard() {
+interface MeetingDashboardProps {
+  onSelectMeeting?: (meetingId: string) => void;
+}
+
+export default function MeetingDashboard({ onSelectMeeting }: MeetingDashboardProps) {
   const [meetings, setMeetings] = useState<MeetingResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -175,6 +179,7 @@ export default function MeetingDashboard() {
               onEnd={() => handleEndMeeting(meeting.meeting_id)}
               onPause={() => handlePauseMeeting(meeting.meeting_id)}
               onResume={() => handleResumeMeeting(meeting.meeting_id)}
+              onSelectMeeting={onSelectMeeting}
             />
           ))}
         </div>
@@ -211,9 +216,10 @@ interface MeetingCardProps {
   onEnd: () => void;
   onPause: () => void;
   onResume: () => void;
+  onSelectMeeting?: (meetingId: string) => void;
 }
 
-function MeetingCard({ meeting, onStart, onEnd, onPause, onResume }: MeetingCardProps) {
+function MeetingCard({ meeting, onStart, onEnd, onPause, onResume, onSelectMeeting }: MeetingCardProps) {
   const [showDetails, setShowDetails] = useState(false);
   const [meetingDetails, setMeetingDetails] = useState<any>(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
@@ -319,6 +325,19 @@ function MeetingCard({ meeting, onStart, onEnd, onPause, onResume }: MeetingCard
           >
             {loadingDetails ? '⏳' : '👁️'} View Details
           </button>
+          
+          {onSelectMeeting && (
+            <button 
+              onClick={() => {
+                onSelectMeeting(meeting.meeting_id);
+                // If there's a way to navigate to the meeting-detail page, call it here
+                // For now, we'll assume the parent component handles navigation
+              }}
+              className="btn btn-primary"
+            >
+              📋 Detailed View
+            </button>
+          )}
         </div>
       </div>
 
