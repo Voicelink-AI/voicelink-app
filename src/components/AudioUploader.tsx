@@ -1,6 +1,5 @@
 import { useState, useRef } from 'react';
 import { VoiceLinkAPI } from '../services/api';
-import { useTranslation } from '../hooks/useTranslation';
 
 interface AudioUploaderProps {
   onFileUpload: (file: File, meetingId?: string) => void;
@@ -11,26 +10,27 @@ interface AudioUploaderProps {
 }
 
 interface ProcessingResult {
-  upload?: any;
-  meeting?: any;
-  transcript?: any;
+  transcript?: string;
+  speakers?: any[];
   error?: string;
 }
 
-export default function AudioUploader({ 
-  onFileUpload, 
+export default function AudioUploader({
+  onFileUpload,
   onNavigateToMeeting,
   onNavigateToMeetings,
   onNavigateToChat,
-  isProcessing = false 
+  isProcessing = false
 }: AudioUploaderProps) {
   const { t } = useTranslation();
   const [isDragging, setIsDragging] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [processingStage, setProcessingStage] = useState<'idle' | 'uploading' | 'creating_meeting' | 'complete' | 'error'>('idle');
+  const [processingStage, setProcessingStage] = useState<'idle' | 'uploading' | 'complete' | 'error'>('idle');
   const [processingResult, setProcessingResult] = useState<ProcessingResult | null>(null);
+  const [transcript, setTranscript] = useState<string | null>(null);
+  const [speakers, setSpeakers] = useState<any[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const acceptedFormats = ['.wav', '.mp3', '.m4a', '.flac'];
@@ -49,7 +49,7 @@ export default function AudioUploader({
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    
+
     const files = e.dataTransfer.files;
     if (files.length > 0) {
       handleFileSelect(files[0]);
@@ -60,11 +60,11 @@ export default function AudioUploader({
     if (!file.type.startsWith('audio/') && !acceptedFormats.some(format => file.name.toLowerCase().endsWith(format.substring(1)))) {
       return 'Please select an audio file (WAV, MP3, M4A, or FLAC)';
     }
-    
+
     if (file.size > maxSize) {
       return 'File size must be less than 100MB';
     }
-    
+
     return null;
   };
 
@@ -82,80 +82,21 @@ export default function AudioUploader({
     setProcessingStage('uploading');
 
     try {
-      // Stage 1: Upload File using the working endpoint
-      console.log('🚀 Starting file upload:', file.name);
-      
-      const progressInterval = setInterval(() => {
-        setUploadProgress(prev => {
-          if (prev >= 90) {
-            clearInterval(progressInterval);
-            return 90;
-          }
-          return prev + 10;
-        });
-      }, 200);
-
-      const uploadResponse = await VoiceLinkAPI.uploadAudio(file);
-      clearInterval(progressInterval);
-      setUploadProgress(100);
-      
-      console.log('✅ Upload successful:', uploadResponse);
-
-      // Stage 2: Create Meeting from File using the new endpoint
-      setProcessingStage('creating_meeting');
-      console.log('📋 Creating meeting from file...');
-
-      const meetingResponse = await VoiceLinkAPI.createMeetingFromFile(
-        uploadResponse.file_id, 
-        `Meeting from ${file.name}`
-      );
-      
-      console.log('✅ Meeting created:', meetingResponse);
-
-      // Stage 3: Complete
+      // Directly process meeting audio using the endpoint
+      const result = await processMeetingAudio(file, "wav");
       setProcessingStage('complete');
-      const result: ProcessingResult = {
-        upload: uploadResponse,
-        meeting: meetingResponse
-      };
-      
-      setProcessingResult(result);
-      
-      // Notify parent component
-      onFileUpload(file, meetingResponse.meeting_id);
-      
-      console.log('🎉 Complete processing pipeline finished');
-
+      setProcessingResult({
+        transcript: result.transcript,
+        speakers: result.speakers,
+        error: result.error
+      });
+      setTranscript(result.transcript);
+      setSpeakers(result.speakers);
+      onFileUpload(file);
     } catch (error) {
-      console.error('❌ Processing failed:', error);
       setProcessingStage('error');
-      
-      // FIXED: Better error message extraction
       let errorMessage = 'Failed to process audio file. Please try again.';
-      
-      if (error instanceof Error) {
-        errorMessage = error.message;
-      } else if (error && typeof error === 'object') {
-        // Handle different error object structures
-        if ('detail' in error && typeof error.detail === 'string') {
-          errorMessage = error.detail;
-        } else if ('message' in error && typeof error.message === 'string') {
-          errorMessage = error.message;
-        } else {
-          // If it's still an object, stringify it properly
-          try {
-            const errorStr = JSON.stringify(error);
-            if (errorStr !== '{}') {
-              errorMessage = `API Error: ${errorStr}`;
-            }
-          } catch (stringifyError) {
-            errorMessage = 'Unknown error occurred while processing file';
-          }
-        }
-      } else if (typeof error === 'string') {
-        errorMessage = error;
-      }
-      
+      if (error instanceof Error) errorMessage = error.message;
       setError(errorMessage);
       setProcessingResult({ error: errorMessage });
     }
@@ -163,10 +104,10 @@ export default function AudioUploader({
 
   const getProcessingMessage = () => {
     switch (processingStage) {
-      case 'uploading': return t('uploader.uploading');
-      case 'creating_meeting': return t('uploader.creatingMeeting');
-      case 'complete': return t('uploader.uploadComplete');
-      case 'error': return t('uploader.processingFailed');
+      case 'uploading': return 'Uploading audio file...';
+      case 'creating_meeting': return 'Creating meeting from audio file...';
+      case 'complete': return 'Upload complete!';
+      case 'error': return 'Processing failed';
       default: return '';
     }
   };
@@ -199,20 +140,10 @@ export default function AudioUploader({
     setError(null);
     setProcessingStage('idle');
     setProcessingResult(null);
+    setTranscript(null);
+    setSpeakers([]);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
-    }
-  };
-
-  const navigateToMeeting = () => {
-    if (processingResult?.meeting?.meeting_id && onNavigateToMeeting) {
-      onNavigateToMeeting(processingResult.meeting.meeting_id);
-    }
-  };
-
-  const navigateToChat = () => {
-    if (processingResult?.meeting?.meeting_id && onNavigateToChat) {
-      onNavigateToChat(processingResult.meeting.meeting_id);
     }
   };
 
@@ -233,7 +164,7 @@ export default function AudioUploader({
             <div className="text-red-400">⚠️</div>
             <div className="ml-2">
               <p className="text-sm text-red-700">{error}</p>
-              <button 
+              <button
                 onClick={resetUpload}
                 className="mt-2 text-xs text-red-600 hover:text-red-800 underline"
               >
@@ -243,7 +174,7 @@ export default function AudioUploader({
           </div>
         </div>
       )}
-      
+
       <div
         className={`upload-zone ${isDragging ? 'dragging' : ''} ${processingStage !== 'idle' || isProcessing ? 'processing' : ''}`}
         onDragOver={handleDragOver}
@@ -260,7 +191,7 @@ export default function AudioUploader({
           style={{ display: 'none' }}
           disabled={processingStage !== 'idle' || isProcessing}
         />
-        
+
         {uploadedFile ? (
           <div className="file-info">
             <div className="text-4xl mb-3">
@@ -273,7 +204,7 @@ export default function AudioUploader({
             {(processingStage === 'uploading') && (
               <div className="mt-4 w-full max-w-md">
                 <div className="flex justify-between text-sm text-gray-600 mb-1">
-                  <span>{t('uploader.uploading')}</span>
+                  <span>Uploading...</span>
                   <span>{uploadProgress}%</span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
@@ -306,31 +237,31 @@ export default function AudioUploader({
               <div className="mt-4 space-y-3">
                 <div className="flex items-center gap-2 text-green-600">
                   <span>✅</span>
-                  <span className="text-sm font-medium">{t('uploader.meetingCreatedSuccess')}</span>
+                  <span className="text-sm font-medium">Meeting created successfully!</span>
                 </div>
                 
                 <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-left max-w-md">
-                  <h4 className="text-sm font-medium text-green-800 mb-2">{t('uploader.meetingDetails')}</h4>
+                  <h4 className="text-sm font-medium text-green-800 mb-2">Meeting Details:</h4>
                   
                   <div className="space-y-2 text-xs">
                     <div>
-                      <p className="font-medium text-green-700">{t('uploader.title')}</p>
+                      <p className="font-medium text-green-700">Title:</p>
                       <p className="text-green-600">{processingResult.meeting.title}</p>
                     </div>
                     
                     <div>
-                      <p className="font-medium text-green-700">{t('uploader.meetingId')}</p>
+                      <p className="font-medium text-green-700">Meeting ID:</p>
                       <p className="text-green-600 font-mono">{processingResult.meeting.meeting_id}</p>
                     </div>
                     
                     <div>
-                      <p className="font-medium text-green-700">{t('uploader.status')}</p>
+                      <p className="font-medium text-green-700">Status:</p>
                       <p className="text-green-600 capitalize">{processingResult.meeting.status}</p>
                     </div>
                     
                     {processingResult.upload?.file_id && (
                       <div>
-                        <p className="font-medium text-green-700">{t('uploader.fileId')}</p>
+                        <p className="font-medium text-green-700">File ID:</p>
                         <p className="text-green-600 font-mono text-xs">{processingResult.upload.file_id}</p>
                       </div>
                     )}
@@ -342,21 +273,21 @@ export default function AudioUploader({
                     onClick={navigateToMeeting}
                     className="btn btn-primary text-xs px-3 py-1"
                   >
-                    📋 {t('uploader.viewMeeting')}
+                    📋 View Meeting
                   </button>
                   
                   <button
                     onClick={navigateToChat}
                     className="btn btn-secondary text-xs px-3 py-1"
                   >
-                    💬 {t('uploader.askQuestions')}
+                    💬 Ask Questions
                   </button>
                   
                   <button
                     onClick={() => onNavigateToMeetings && onNavigateToMeetings()}
                     className="btn btn-secondary text-xs px-3 py-1"
                   >
-                    📝 {t('uploader.allMeetings')}
+                    📝 All Meetings
                   </button>
                 </div>
               </div>
@@ -372,14 +303,14 @@ export default function AudioUploader({
               {t('uploader.supportsFormats', { formats: acceptedFormats.join(', ') })}
             </p>
             <p className="text-sm text-blue-600">
-              {t('uploader.autoCreateMeeting')}
+              ✨ A meeting will be automatically created from your audio file
             </p>
           </div>
         )}
       </div>
-      
+
       <div className="mt-4 text-xs text-gray-500">
-        <p>{t('uploader.newWorkflow')}</p>
+        <p>💡 <strong>New Workflow:</strong> Upload → Auto-create meeting → View results → Chat about content</p>
       </div>
     </div>
   );
