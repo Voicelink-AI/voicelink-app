@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { VoiceLinkAPI } from '../services/api';
+import { useTheme } from '../contexts/ThemeContext';
+import { useTranslation } from '../utils/translations';
 import APIDebugger from './APIDebugger';
 import EndpointTester from './EndpointTester';
 import TestUploadComponent from './TestUploadComponent';
@@ -28,6 +30,15 @@ interface SettingsState {
 }
 
 export default function Settings() {
+  const { theme: currentTheme, setTheme, language: currentLanguage, setLanguage, notifications: currentNotifications, setNotifications } = useTheme();
+  
+  // Local preview state - not applied until save
+  const [previewTheme, setPreviewTheme] = useState<'light' | 'dark' | 'auto'>(currentTheme);
+  const [previewLanguage, setPreviewLanguage] = useState(currentLanguage);
+  const [previewNotifications, setPreviewNotifications] = useState(currentNotifications);
+  
+  const { t } = useTranslation(previewLanguage);
+  
   const [settings, setSettings] = useState<SettingsState>({
     apiSettings: {
       baseUrl: 'http://localhost:8000',
@@ -39,9 +50,9 @@ export default function Settings() {
       codeDetection: true,
     },
     uiSettings: {
-      theme: 'light',
-      language: 'en',
-      notifications: true,
+      theme: currentTheme,
+      language: currentLanguage,
+      notifications: currentNotifications,
     },
     integrations: {
       githubEnabled: false,
@@ -56,14 +67,34 @@ export default function Settings() {
   const handleSave = async () => {
     setIsSaving(true);
     
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // Save to localStorage for demo
-    localStorage.setItem('voicelink-settings', JSON.stringify(settings));
-    
-    setIsSaving(false);
-    alert('Settings saved successfully!');
+    try {
+      // Apply theme and language changes
+      setTheme(previewTheme);
+      setLanguage(previewLanguage);
+      setNotifications(previewNotifications);
+      
+      // Update local settings state
+      setSettings(prev => ({
+        ...prev,
+        uiSettings: {
+          theme: previewTheme,
+          language: previewLanguage,
+          notifications: previewNotifications,
+        }
+      }));
+      
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Save to localStorage for demo
+      localStorage.setItem('voicelink-settings', JSON.stringify(settings));
+      
+      alert('Settings saved successfully! Theme and language changes applied.');
+    } catch (error) {
+      alert('Failed to save settings. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const updateSettings = (section: keyof SettingsState, key: string, value: any) => {
@@ -79,8 +110,11 @@ export default function Settings() {
   return (
     <div className="settings-container">
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Settings</h2>
+        <h2 className="text-2xl font-bold text-gray-900 mb-2">{t('settings.title')}</h2>
         <p className="text-gray-600">Configure VoiceLink to match your workflow and preferences.</p>
+        <div className="text-sm text-gray-500 mt-2">
+          Preview: {t('settings.language')}: {previewLanguage.toUpperCase()} | {t('settings.theme')}: {previewTheme}
+        </div>
       </div>
 
       {/* API Settings */}
@@ -160,43 +194,137 @@ export default function Settings() {
       <div className="settings-section">
         <h3>🎨 Interface</h3>
         <div className="form-group">
-          <label className="form-label">Theme</label>
+          <label className="form-label">{t('settings.theme')}</label>
           <select
             className="form-select"
-            value={settings.uiSettings.theme}
-            onChange={(e) => updateSettings('uiSettings', 'theme', e.target.value)}
+            value={previewTheme}
+            onChange={(e) => setPreviewTheme(e.target.value as 'light' | 'dark' | 'auto')}
           >
-            <option value="light">Light</option>
-            <option value="dark">Dark</option>
-            <option value="auto">Auto (System preference)</option>
+            <option value="light">☀️ {t('settings.lightTheme')}</option>
+            <option value="dark">🌙 {t('settings.darkTheme')}</option>
+            <option value="auto">🔄 {t('settings.autoTheme')}</option>
           </select>
+          <p className="form-description">{t('settings.themePreviewDescription')}</p>
         </div>
         
         <div className="form-group">
-          <label className="form-label">Language</label>
+          <label className="form-label">{t('settings.language')}</label>
           <select
             className="form-select"
-            value={settings.uiSettings.language}
-            onChange={(e) => updateSettings('uiSettings', 'language', e.target.value)}
+            value={previewLanguage}
+            onChange={(e) => setPreviewLanguage(e.target.value as any)}
           >
-            <option value="en">English</option>
-            <option value="es">Spanish</option>
-            <option value="fr">French</option>
-            <option value="de">German</option>
+            <option value="en">🇺🇸 English</option>
+            <option value="es">🇪🇸 Español</option>
+            <option value="fr">🇫🇷 Français</option>
+            <option value="de">🇩🇪 Deutsch</option>
+            <option value="it">🇮🇹 Italiano</option>
+            <option value="pt">🇵🇹 Português</option>
+            <option value="ja">🇯🇵 日本語</option>
+            <option value="ko">🇰🇷 한국어</option>
+            <option value="zh">🇨🇳 中文</option>
           </select>
+          <p className="form-description">{t('settings.languageDescription')}</p>
         </div>
         
         <div className="form-group">
           <label className="flex items-center gap-3">
             <input
               type="checkbox"
-              checked={settings.uiSettings.notifications}
-              onChange={(e) => updateSettings('uiSettings', 'notifications', e.target.checked)}
+              checked={previewNotifications}
+              onChange={(e) => setPreviewNotifications(e.target.checked)}
               className="w-4 h-4"
             />
-            <span className="form-label mb-0">Enable Notifications</span>
+            <span className="form-label mb-0">{t('settings.notifications')}</span>
           </label>
-          <p className="form-description">Show browser notifications when processing is complete</p>
+          <p className="form-description">{t('settings.notificationsDescription')}</p>
+        </div>
+
+        {/* Theme Preview */}
+        <div className="form-group">
+          <label className="form-label">{t('settings.themePreview')}</label>
+          <div className="grid grid-cols-3 gap-3">
+            <div className={`text-center cursor-pointer p-2 rounded-lg border ${previewTheme === 'light' ? 'ring-2 ring-blue-500' : 'border-gray-200'}`} 
+                 onClick={() => setPreviewTheme('light')}>
+              <div className="w-full h-16 bg-white border border-gray-200 rounded-lg mb-2 flex items-center justify-center shadow-sm">
+                <div className="w-8 h-8 bg-gray-100 rounded border"></div>
+              </div>
+              <span className="text-xs text-gray-600">☀️ {t('settings.lightTheme')}</span>
+            </div>
+            <div className={`text-center cursor-pointer p-2 rounded-lg border ${previewTheme === 'dark' ? 'ring-2 ring-blue-500' : 'border-gray-200'}`}
+                 onClick={() => setPreviewTheme('dark')}>
+              <div className="w-full h-16 bg-gray-800 border border-gray-600 rounded-lg mb-2 flex items-center justify-center shadow-sm">
+                <div className="w-8 h-8 bg-gray-700 rounded border border-gray-600"></div>
+              </div>
+              <span className="text-xs text-gray-600">🌙 {t('settings.darkTheme')}</span>
+            </div>
+            <div className={`text-center cursor-pointer p-2 rounded-lg border ${previewTheme === 'auto' ? 'ring-2 ring-blue-500' : 'border-gray-200'}`}
+                 onClick={() => setPreviewTheme('auto')}>
+              <div className="w-full h-16 bg-gradient-to-r from-white to-gray-800 border border-gray-300 rounded-lg mb-2 flex items-center justify-center shadow-sm">
+                <div className="w-8 h-8 bg-gray-400 rounded border"></div>
+              </div>
+              <span className="text-xs text-gray-600">🔄 {t('settings.autoTheme')}</span>
+            </div>
+          </div>
+          <p className="form-description mt-2">{t('settings.themePreviewDescription')}</p>
+        </div>
+
+        {/* Current vs Preview Indicator */}
+        {(previewTheme !== currentTheme || previewLanguage !== currentLanguage || previewNotifications !== currentNotifications) && (
+          <div className="form-group">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <div className="flex items-center gap-2">
+                <div className="text-blue-500">ℹ️</div>
+                <div>
+                  <p className="text-sm font-medium text-blue-800">{t('settings.unsavedChanges')}</p>
+                  <p className="text-xs text-blue-600">
+                    {t('settings.theme')}: {currentTheme} → {previewTheme} | 
+                    {t('settings.language')}: {currentLanguage} → {previewLanguage} | 
+                    {t('settings.notifications')}: {currentNotifications ? t('common.on') : t('common.off')} → {previewNotifications ? t('common.on') : t('common.off')}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Accessibility Settings */}
+      <div className="settings-section">
+        <h3>♿ Accessibility</h3>
+        <div className="form-group">
+          <label className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              defaultChecked={false}
+              className="w-4 h-4"
+            />
+            <span className="form-label mb-0">High Contrast Mode</span>
+          </label>
+          <p className="form-description">Increase contrast for better visibility</p>
+        </div>
+        
+        <div className="form-group">
+          <label className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              defaultChecked={false}
+              className="w-4 h-4"
+            />
+            <span className="form-label mb-0">Reduce Motion</span>
+          </label>
+          <p className="form-description">Minimize animations and transitions</p>
+        </div>
+        
+        <div className="form-group">
+          <label className="form-label">Font Size</label>
+          <select className="form-select" defaultValue="medium">
+            <option value="small">Small</option>
+            <option value="medium">Medium</option>
+            <option value="large">Large</option>
+            <option value="extra-large">Extra Large</option>
+          </select>
+          <p className="form-description">Adjust text size for better readability</p>
         </div>
       </div>
 
@@ -271,21 +399,33 @@ export default function Settings() {
         </div>
       </div>
 
-      {/* Save Button */}
-      <div className="flex justify-end">
+      {/* Action Buttons */}
+      <div className="flex justify-between">
+        <button
+          onClick={() => {
+            setPreviewTheme(currentTheme);
+            setPreviewLanguage(currentLanguage);
+            setPreviewNotifications(currentNotifications);
+          }}
+          className="btn btn-secondary"
+          disabled={isSaving}
+        >
+          🔄 {t('common.reset')}
+        </button>
+        
         <button
           onClick={handleSave}
-          disabled={isSaving}
+          disabled={isSaving || (previewTheme === currentTheme && previewLanguage === currentLanguage && previewNotifications === currentNotifications)}
           className="btn btn-primary"
         >
           {isSaving ? (
             <>
               <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-              Saving...
+              {t('common.saving')}
             </>
           ) : (
             <>
-              💾 Save Settings
+              💾 {t('common.save')}
             </>
           )}
         </button>

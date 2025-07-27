@@ -3,9 +3,34 @@ export interface Meeting {
   title: string;
   duration: number;
   participants: string[];
-  status: 'processing' | 'completed' | 'failed';
+  participants_count: number;
+  status: 'processing' | 'completed' | 'failed' | 'scheduled' | 'active' | 'paused' | 'cancelled';
   createdAt: string;
   audioFileName?: string;
+  audio_info?: {
+    duration: number;
+    file_size: number;
+    format: string;
+    sample_rate: number;
+    channels: number;
+    url?: string;
+  };
+  analytics?: {
+    sentiment_score: number;
+    engagement_score: number;
+    speaking_distribution: Array<{
+      speaker: string;
+      percentage: number;
+      duration: number;
+    }>;
+  };
+  processing_info?: {
+    status: 'pending' | 'processing' | 'completed' | 'failed';
+    progress?: number;
+    error_message?: string;
+    started_at?: string;
+    completed_at?: string;
+  };
 }
 
 export interface MeetingResult {
@@ -18,9 +43,11 @@ export interface MeetingResult {
     };
     transcripts: Array<{
       text: string;
+      speaker: string;
       speaker_id: number;
       start_time: number;
       end_time: number;
+      confidence?: number;
     }>;
     code_context: {
       github_references: Array<{

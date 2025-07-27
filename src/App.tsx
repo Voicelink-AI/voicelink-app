@@ -10,6 +10,7 @@ import SystemMonitor from './components/SystemMonitor';
 import BlockchainVerifier from './components/BlockchainVerifier';
 import Settings from './components/Settings';
 import { VoiceLinkAPI } from './services/api';
+import { ThemeProvider } from './contexts/ThemeContext';
 import './App.css';
 
 function App() {
@@ -21,6 +22,15 @@ function App() {
   const handleSelectMeeting = (meetingId: string) => {
     setSelectedMeetingId(meetingId);
     setCurrentPage('meeting-detail');
+  };
+
+  const handleNavigateToMeetings = () => {
+    setCurrentPage('meetings');
+  };
+
+  const handleNavigateToChat = (meetingId: string) => {
+    setSelectedMeetingId(meetingId);
+    setCurrentPage('chat');
   };
 
   useEffect(() => {
@@ -46,10 +56,23 @@ function App() {
   const renderPage = () => {
     switch (currentPage) {
       case 'dashboard':
-        return <Dashboard />;
+        return <Dashboard 
+          onNavigateToMeeting={handleSelectMeeting}
+          onNavigateToMeetings={handleNavigateToMeetings}
+          onNavigateToChat={handleNavigateToChat}
+        />;
       case 'meetings':
-        return <MeetingDashboard onSelectMeeting={handleSelectMeeting} />;
+        return <MeetingDashboard 
+          onSelectMeeting={handleSelectMeeting} 
+          onNavigateToMeeting={(meetingId) => {
+            console.log('App: Navigating to meeting details for:', meetingId);
+            setSelectedMeetingId(meetingId);
+            setCurrentPage('meeting-detail');
+          }}
+          onNavigateToChat={handleNavigateToChat}
+        />;
       case 'meeting-detail':
+        console.log('Rendering meeting detail with ID:', selectedMeetingId);
         return selectedMeetingId ? (
           <MeetingDetailView meetingId={selectedMeetingId} />
         ) : (
@@ -136,12 +159,14 @@ function App() {
   }
 
   return (
-    <Layout 
-      currentPage={currentPage} 
-      onNavigate={setCurrentPage}
-    >
-      {renderPage()}
-    </Layout>
+    <ThemeProvider>
+      <Layout 
+        currentPage={currentPage} 
+        onNavigate={setCurrentPage}
+      >
+        {renderPage()}
+      </Layout>
+    </ThemeProvider>
   );
 }
 

@@ -50,6 +50,8 @@ export default function AnalyticsDashboard() {
       setAnalytics(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load analytics');
+      // Don't set mock data - let the component show the error state
+      setAnalytics(null);
     } finally {
       setLoading(false);
     }
@@ -83,13 +85,13 @@ export default function AnalyticsDashboard() {
     }));
   };
 
-  const exportData = async (exportFormat: 'csv' | 'json' | 'pdf') => {
+  const exportData = async (fileFormat: 'csv' | 'json' | 'pdf') => {
     try {
-      const blob = await VoiceLinkAPI.exportAnalytics(exportFormat);
+      const blob = await VoiceLinkAPI.exportAnalytics(fileFormat);
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `analytics-${exportFormat}-${format(new Date(), 'yyyy-MM-dd')}.${exportFormat}`;
+      a.download = `analytics-${fileFormat}-${format(new Date(), 'yyyy-MM-dd')}.${fileFormat}`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
@@ -116,10 +118,15 @@ export default function AnalyticsDashboard() {
         <div className="flex items-center">
           <div className="text-red-400 text-xl mr-3">⚠️</div>
           <div>
-            <h3 className="text-lg font-medium text-red-800">Error Loading Analytics</h3>
+            <h3 className="text-lg font-medium text-red-800">Analytics Unavailable</h3>
             <p className="text-red-600 mt-1">{error}</p>
-            <button onClick={loadAnalytics} className="mt-3 btn btn-secondary text-sm">
-              Retry
+            {error.includes('backend server') && (
+              <p className="text-red-500 mt-2 text-sm">
+                To view analytics data, start the VoiceLink backend server on <code className="bg-red-100 px-1 rounded">localhost:8000</code>
+              </p>
+            )}
+            <button onClick={loadAnalytics} className="mt-3 bg-red-100 hover:bg-red-200 text-red-800 px-4 py-2 rounded-md text-sm font-medium transition-colors">
+              Retry Connection
             </button>
           </div>
         </div>

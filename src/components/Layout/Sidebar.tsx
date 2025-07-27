@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Home, Upload, Settings, Mic } from 'lucide-react';
+import { Home, Upload, Settings} from 'lucide-react';
 import { cn } from '../../utils';
 
 const navigation = [
@@ -14,16 +14,7 @@ const Sidebar: React.FC = () => {
   
   return (
     <div className="w-64 bg-white border-r border-gray-200 flex flex-col">
-      <div className="p-6">
-        <div className="flex items-center space-x-3">
-          <div className="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center">
-            <Mic className="w-5 h-5 text-white" />
-          </div>
-          <h1 className="text-xl font-bold text-gray-900">Voicelink</h1>
-        </div>
-      </div>
-      
-      <nav className="flex-1 px-4 space-y-2">
+      <nav className="flex-1 px-4 space-y-2 pt-6">
         {navigation.map((item) => {
           const isActive = location.pathname === item.href;
           return (

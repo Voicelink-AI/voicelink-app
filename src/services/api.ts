@@ -1,3 +1,5 @@
+import type { Meeting } from '../types';
+
 const API_BASE_URL = 'http://localhost:8000/api/v1';
 
 // Types - Updated to match actual API responses
@@ -52,6 +54,116 @@ export interface AnalyticsResponse {
   word_cloud_data: Array<{
     word: string;
     frequency: number;
+  }>;
+}
+
+export interface MeetingAnalytics {
+  meeting_id: string;
+  duration_minutes: number;
+  participant_breakdown: Array<{
+    participant: string;
+    speaking_time: number;
+    speaking_percentage: number;
+    engagement_score: number;
+    interruptions: number;
+    questions_asked: number;
+  }>;
+  topics_discussed: Array<{
+    topic: string;
+    frequency: number;
+    sentiment: number;
+    start_time?: number;
+    end_time?: number;
+    participants: string[];
+  }>;
+  action_items: Array<{
+    action: string;
+    assignee?: string;
+    priority: 'low' | 'medium' | 'high';
+    status: 'pending' | 'in_progress' | 'completed';
+    mentioned_at: number;
+    context: string;
+  }>;
+  code_context: {
+    languages_mentioned: Array<{
+      language: string;
+      frequency: number;
+      lines_discussed: number;
+      files_mentioned: string[];
+    }>;
+    repositories: Array<{
+      repo_name: string;
+      issues_mentioned: string[];
+      commits_referenced: string[];
+      files_discussed: string[];
+    }>;
+    technical_concepts: Array<{
+      concept: string;
+      frequency: number;
+      complexity_level: number;
+    }>;
+  };
+  sentiment_timeline: Array<{
+    timestamp: number;
+    sentiment: number;
+    speaker?: string;
+  }>;
+  key_moments: Array<{
+    timestamp: number;
+    type: 'decision' | 'action_item' | 'question' | 'issue';
+    description: string;
+    participants: string[];
+  }>;
+  summary_stats: {
+    total_words: number;
+    average_speaking_speed: number;
+    silence_percentage: number;
+    energy_level: number;
+    collaboration_score: number;
+  };
+}
+
+export interface DetailedAnalyticsResponse {
+  overview: AnalyticsResponse;
+  meeting_trends: Array<{
+    date: string;
+    meetings_count: number;
+    participants_count: number;
+    avg_duration: number;
+  }>;
+  participation_stats: Array<{
+    participant: string;
+    speaking_time: number;
+    meetings_attended: number;
+    engagement_score: number;
+  }>;
+  topics_analysis: Array<{
+    topic: string;
+    frequency: number;
+    sentiment: number;
+    meetings: string[];
+  }>;
+  action_items: Array<{
+    action: string;
+    status: 'pending' | 'completed' | 'in_progress';
+    assignee?: string;
+    meeting_id: string;
+    created_at: string;
+  }>;
+  code_context: Array<{
+    language: string;
+    frequency: number;
+    complexity_score: number;
+    lines_discussed: number;
+  }>;
+  duration_distribution: Array<{
+    range: string;
+    count: number;
+  }>;
+  weekly_activity: Array<{
+    week: string;
+    meetings: number;
+    hours: number;
   }>;
 }
 
@@ -541,6 +653,77 @@ export class VoiceLinkAPI {
     }
   }
 
+  static async getDetailedAnalytics(filters?: {
+    start_date?: string;
+    end_date?: string;
+    project?: string;
+  }): Promise<DetailedAnalyticsResponse> {
+    const queryParams = new URLSearchParams();
+    if (filters?.start_date) queryParams.set('start_date', filters.start_date);
+    if (filters?.end_date) queryParams.set('end_date', filters.end_date);
+    if (filters?.project) queryParams.set('project', filters.project);
+    
+    const endpoint = `/analytics/detailed${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+    return await this.request<DetailedAnalyticsResponse>(endpoint);
+  }
+
+  static async getMeetingsByDateRange(start_date: string, end_date: string): Promise<MeetingResponse[]> {
+    try {
+      const queryParams = new URLSearchParams({ start_date, end_date });
+      return await this.request<MeetingResponse[]>(`/analytics/meetings?${queryParams.toString()}`);
+    } catch (error) {
+      console.error('Meeting date range error:', error);
+      return [];
+    }
+  }
+
+  static async getMeetingAnalytics(meetingId: string): Promise<MeetingAnalytics> {
+    return await this.request<MeetingAnalytics>(`/analytics/meetings/${meetingId}`);
+  }
+
+  static async getMeetingAnalyticsRealtime(meetingId: string, callback: (data: MeetingAnalytics) => void): Promise<EventSource | null> {
+    try {
+      const eventSource = new EventSource(`${API_BASE_URL}/analytics/meetings/${meetingId}/realtime`);
+      
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          callback(data);
+        } catch (err) {
+          console.error('Error parsing realtime analytics:', err);
+        }
+      };
+
+      eventSource.onerror = (error) => {
+        console.error('EventSource error:', error);
+        // Fallback to polling if SSE not available
+        this.pollMeetingAnalytics(meetingId, callback);
+      };
+
+      return eventSource;
+    } catch (error) {
+      console.error('Realtime analytics error:', error);
+      // Fallback to polling
+      this.pollMeetingAnalytics(meetingId, callback);
+      return null;
+    }
+  }
+
+  private static pollMeetingAnalytics(meetingId: string, callback: (data: MeetingAnalytics) => void) {
+    const pollInterval = setInterval(async () => {
+      try {
+        const data = await this.getMeetingAnalytics(meetingId);
+        callback(data);
+      } catch (error) {
+        console.error('Polling error:', error);
+        clearInterval(pollInterval);
+      }
+    }, 5000); // Poll every 5 seconds
+
+    // Store interval ID for cleanup
+    (window as any).meetingAnalyticsInterval = pollInterval;
+  }
+
   static async exportAnalytics(format: 'csv' | 'json' | 'pdf'): Promise<Blob> {
     const response = await fetch(`${API_BASE_URL}/analytics/export/${format}`);
     
@@ -661,6 +844,86 @@ export class VoiceLinkAPI {
       return response.json();
     } catch (error) {
       console.error('Query meeting error:', error);
+      throw error;
+    }
+  }
+
+  // Enhanced Backend Integration Methods
+  static async getAudioStream(meetingId: string): Promise<string> {
+    try {
+      // Return the URL for audio streaming
+      return `${API_BASE_URL}/meetings/${meetingId}/audio`;
+    } catch (error) {
+      console.error('Get audio stream error:', error);
+      throw error;
+    }
+  }
+
+  static async downloadMeetingData(meetingId: string): Promise<Blob> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/meetings/${meetingId}/download`);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to download meeting data: ${response.status} ${response.statusText}`);
+      }
+
+      return response.blob();
+    } catch (error) {
+      console.error('Download meeting data error:', error);
+      throw error;
+    }
+  }
+
+  static async processAudioForMeeting(meetingId: string, audioFile?: File): Promise<any> {
+    try {
+      const formData = new FormData();
+      if (audioFile) {
+        formData.append('audio', audioFile);
+      }
+
+      const response = await fetch(`${API_BASE_URL}/meetings/${meetingId}/process-audio`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to process audio: ${response.status} ${response.statusText}`);
+      }
+
+      return response.json();
+    } catch (error) {
+      console.error('Process audio error:', error);
+      throw error;
+    }
+  }
+
+  // Enhanced meeting data with new structure
+  static async getMeetingWithEnhancedData(meetingId: string): Promise<Meeting> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/meetings/${meetingId}`);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to get meeting: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      
+      // Transform backend response to frontend Meeting interface
+      return {
+        id: data.meeting_id || meetingId,
+        title: data.title,
+        duration: data.audio_info?.duration || 0,
+        participants: data.participants?.map((p: any) => p.email || p.name || p) || [],
+        participants_count: data.participants_count || data.participants?.length || 0,
+        status: data.status || 'processing',
+        createdAt: data.created_at || new Date().toISOString(),
+        audioFileName: data.audio_info?.url,
+        audio_info: data.audio_info,
+        analytics: data.analytics,
+        processing_info: data.processing_info,
+      };
+    } catch (error) {
+      console.error('Get enhanced meeting data error:', error);
       throw error;
     }
   }

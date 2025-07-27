@@ -3,7 +3,17 @@ import { VoiceLinkAPI, type AnalyticsResponse } from '../services/api';
 import AudioUploader from './AudioUploader';
 import ChatInterface from './ChatInterface';
 
-export default function Dashboard() {
+interface DashboardProps {
+  onNavigateToMeeting?: (meetingId: string) => void;
+  onNavigateToMeetings?: () => void;
+  onNavigateToChat?: (meetingId: string) => void;
+}
+
+export default function Dashboard({
+  onNavigateToMeeting,
+  onNavigateToMeetings,
+  onNavigateToChat
+}: DashboardProps = {}) {
   const [analytics, setAnalytics] = useState<AnalyticsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -98,7 +108,7 @@ export default function Dashboard() {
             </div>
             <div className="flex gap-2">
               <button
-                onClick={() => window.location.hash = `/meetings/${recentMeetingId}`}
+                onClick={() => onNavigateToMeeting?.(recentMeetingId!)}
                 className="btn btn-primary text-xs"
               >
                 View Meeting
@@ -137,11 +147,11 @@ export default function Dashboard() {
             <p className="stat-label">Total Participants</p>
           </div>
           <div className="stat-card">
-            <p className="stat-value">{Math.round((analytics.total_minutes_recorded || analytics.total_speaking_time) / 60)}h</p>
+            <p className="stat-value">{Math.round(((analytics.total_minutes_recorded || analytics.total_speaking_time) || 0) / 60) || 0}h</p>
             <p className="stat-label">Speaking Time</p>
           </div>
           <div className="stat-card">
-            <p className="stat-value">{analytics.active_meetings}</p>
+            <p className="stat-value">{analytics.active_meetings || 0}</p>
             <p className="stat-label">Active Meetings</p>
           </div>
         </div>
@@ -151,7 +161,12 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Left Column - Upload */}
         <div className="lg:col-span-2">
-          <AudioUploader onFileUpload={handleFileUpload} />
+          <AudioUploader 
+            onFileUpload={handleFileUpload}
+            onNavigateToMeeting={onNavigateToMeeting}
+            onNavigateToMeetings={onNavigateToMeetings}
+            onNavigateToChat={onNavigateToChat}
+          />
           
           {/* Updated Instructions */}
           <div className="bg-white rounded-lg border border-gray-200 p-6">
@@ -212,7 +227,7 @@ export default function Dashboard() {
               <div className="flex items-center justify-between text-sm">
                 <span className="text-gray-600">Speaking Time</span>
                 <span className="text-gray-900">
-                  {analytics ? Math.round((analytics.total_minutes_recorded || analytics.total_speaking_time) / 60) : 0}h
+                  {analytics ? (Math.round(((analytics.total_minutes_recorded || analytics.total_speaking_time) || 0) / 60) || 0) : 0}h
                 </span>
               </div>
               {recentMeetingId && (

@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { VoiceLinkAPI, type MeetingResponse } from '../services/api';
+import React, { useState, useEffect, useRef } from 'react';
+import { VoiceLinkAPI, type MeetingAnalytics } from '../services/api';
+import type { Meeting } from '../types';
 
 interface MeetingDetailViewProps {
   meetingId: string;
@@ -14,6 +15,119 @@ interface TranscriptSegment {
   end_time: number;
   confidence?: number;
 }
+
+// Audio Player Component
+const AudioPlayer: React.FC<{ audioUrl: string; onTimeUpdate?: (time: number) => void }> = ({ 
+  audioUrl, 
+  onTimeUpdate 
+}) => {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [volume, setVolume] = useState(1);
+
+  const togglePlay = () => {
+    if (audioRef.current) {
+      if (isPlaying) {
+        audioRef.current.pause();
+      } else {
+        audioRef.current.play();
+      }
+      setIsPlaying(!isPlaying);
+    }
+  };
+
+  const handleTimeUpdate = () => {
+    if (audioRef.current) {
+      const time = audioRef.current.currentTime;
+      setCurrentTime(time);
+      onTimeUpdate?.(time);
+    }
+  };
+
+  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (audioRef.current) {
+      const time = parseFloat(e.target.value);
+      audioRef.current.currentTime = time;
+      setCurrentTime(time);
+    }
+  };
+
+  const formatTime = (time: number) => {
+    const minutes = Math.floor(time / 60);
+    const seconds = Math.floor(time % 60);
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  return (
+    <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
+      <div className="flex items-center space-x-4">
+        <button
+          onClick={togglePlay}
+          className="w-12 h-12 rounded-full bg-blue-600 text-white flex items-center justify-center hover:bg-blue-700 transition-colors"
+        >
+          {isPlaying ? (
+            <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
+            </svg>
+          ) : (
+            <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M8 5v14l11-7z"/>
+            </svg>
+          )}
+        </button>
+        
+        <div className="flex-1">
+          <input
+            type="range"
+            min="0"
+            max={duration}
+            value={currentTime}
+            onChange={handleSeek}
+            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+          />
+          <div className="flex justify-between text-sm text-gray-500 mt-1">
+            <span>{formatTime(currentTime)}</span>
+            <span>{formatTime(duration)}</span>
+          </div>
+        </div>
+        
+        <div className="flex items-center space-x-2">
+          <svg className="w-4 h-4 text-gray-400" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M3 9v6h4.03L12 18V6L7.03 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
+          </svg>
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.1"
+            value={volume}
+            onChange={(e) => {
+              const vol = parseFloat(e.target.value);
+              setVolume(vol);
+              if (audioRef.current) audioRef.current.volume = vol;
+            }}
+            className="w-20 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+          />
+        </div>
+      </div>
+      
+      <audio
+        ref={audioRef}
+        src={audioUrl}
+        onTimeUpdate={handleTimeUpdate}
+        onLoadedMetadata={() => {
+          if (audioRef.current) {
+            setDuration(audioRef.current.duration);
+          }
+        }}
+        onPlay={() => setIsPlaying(true)}
+        onPause={() => setIsPlaying(false)}
+      />
+    </div>
+  );
+};
 
 interface AIInsights {
   summary: string;
@@ -52,41 +166,122 @@ interface QAMessage {
 }
 
 export default function MeetingDetailView({ meetingId, isModal = false, onClose }: MeetingDetailViewProps) {
-  const [meeting, setMeeting] = useState<MeetingResponse | null>(null);
+  console.log('MeetingDetailView: Rendering with meetingId:', meetingId);
+  const [meeting, setMeeting] = useState<Meeting | null>(null);
   const [transcript, setTranscript] = useState<TranscriptSegment[]>([]);
   const [aiInsights, setAIInsights] = useState<AIInsights | null>(null);
   const [codeContext, setCodeContext] = useState<CodeContext | null>(null);
   const [qaMessages, setQAMessages] = useState<QAMessage[]>([]);
+  const [analytics, setAnalytics] = useState<MeetingAnalytics | null>(null);
   const [newQuestion, setNewQuestion] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeSection, setActiveSection] = useState<string>('overview');
   const [isAskingQuestion, setIsAskingQuestion] = useState(false);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [currentAudioTime, setCurrentAudioTime] = useState(0);
 
   useEffect(() => {
     loadMeetingData();
   }, [meetingId]);
 
+  // Real-time analytics updates
+  useEffect(() => {
+    if (!analytics || activeSection !== 'analytics') return;
+
+    let eventSource: EventSource | null = null;
+    let pollInterval: number | null = null;
+
+    // Try EventSource first, fallback to polling
+    try {
+      eventSource = new EventSource(`http://localhost:8000/api/v1/analytics/meetings/${meetingId}/realtime`);
+      
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          setAnalytics(data);
+        } catch (err) {
+          console.error('Failed to parse real-time analytics:', err);
+        }
+      };
+
+      eventSource.onerror = () => {
+        console.log('EventSource failed, falling back to polling');
+        eventSource?.close();
+        
+        // Fallback to polling every 30 seconds
+        pollInterval = setInterval(async () => {
+          try {
+            const data = await VoiceLinkAPI.getMeetingAnalytics(meetingId);
+            setAnalytics(data);
+          } catch (err) {
+            console.error('Failed to poll analytics:', err);
+          }
+        }, 30000);
+      };
+    } catch (err) {
+      console.log('EventSource not supported, using polling');
+      
+      // Fallback to polling every 30 seconds
+      pollInterval = setInterval(async () => {
+        try {
+          const data = await VoiceLinkAPI.getMeetingAnalytics(meetingId);
+          setAnalytics(data);
+        } catch (err) {
+          console.error('Failed to poll analytics:', err);
+        }
+      }, 30000);
+    }
+
+    return () => {
+      eventSource?.close();
+      if (pollInterval) clearInterval(pollInterval);
+    };
+  }, [meetingId, analytics, activeSection]);
+
   const loadMeetingData = async () => {
+    console.log('MeetingDetailView: Loading meeting data for:', meetingId);
     try {
       setLoading(true);
       setError(null);
 
-      // Load meeting details
-      const meetingData = await VoiceLinkAPI.getMeeting(meetingId);
+      // Load enhanced meeting details
+      console.log('MeetingDetailView: Calling API to get enhanced meeting:', meetingId);
+      const meetingData = await VoiceLinkAPI.getMeetingWithEnhancedData(meetingId);
+      console.log('MeetingDetailView: Received enhanced meeting data:', meetingData);
       setMeeting(meetingData);
+
+      // Set audio URL if available
+      if (meetingData.audio_info?.url) {
+        setAudioUrl(meetingData.audio_info.url);
+      } else {
+        // Try to get audio stream URL
+        try {
+          const audioStreamUrl = await VoiceLinkAPI.getAudioStream(meetingId);
+          setAudioUrl(audioStreamUrl);
+        } catch (err) {
+          console.log('Audio stream not available:', err);
+        }
+      }
 
       // Try to load additional data (these might return 501/404 if not implemented)
       await Promise.allSettled([
         loadTranscript(),
         loadAIInsights(),
         loadCodeContext(),
+        loadAnalytics(),
       ]);
 
     } catch (err) {
-      console.error('Failed to load meeting data:', err);
+      console.error('MeetingDetailView: Failed to load meeting data:', err);
+      console.error('MeetingDetailView: Error details:', {
+        message: err instanceof Error ? err.message : 'Unknown error',
+        meetingId: meetingId,
+        type: typeof err
+      });
       setError(err instanceof Error ? err.message : 'Failed to load meeting data');
     } finally {
+      console.log('MeetingDetailView: Finished loading, setting loading to false');
       setLoading(false);
     }
   };
@@ -221,6 +416,17 @@ export default function MeetingDetailView({ meetingId, isModal = false, onClose 
     }
   };
 
+  const loadAnalytics = async () => {
+    try {
+      const analyticsData = await VoiceLinkAPI.getMeetingAnalytics(meetingId);
+      setAnalytics(analyticsData);
+    } catch (err) {
+      console.log('Analytics not available yet, using placeholder data');
+      // This will use the mock data from the API service
+      setAnalytics(null);
+    }
+  };
+
   const handleAskQuestion = async () => {
     if (!newQuestion.trim() || isAskingQuestion) return;
 
@@ -289,11 +495,17 @@ export default function MeetingDetailView({ meetingId, isModal = false, onClose 
   }
 
   if (error || !meeting) {
+    console.log('MeetingDetailView: Showing error state. Error:', error, 'Meeting:', meeting, 'MeetingId:', meetingId);
     return (
       <div className="text-center p-8">
         <div className="text-4xl mb-4">⚠️</div>
         <h3 className="text-lg font-medium text-gray-900 mb-2">Error Loading Meeting</h3>
         <p className="text-gray-500 mb-4">{error || 'Meeting not found'}</p>
+        <div className="text-xs text-gray-400 mb-4">
+          Meeting ID: {meetingId}<br/>
+          Error: {error}<br/>
+          Meeting Data: {meeting ? 'Available' : 'Not available'}
+        </div>
         {onClose && (
           <button onClick={onClose} className="btn btn-secondary">
             Close
@@ -308,6 +520,7 @@ export default function MeetingDetailView({ meetingId, isModal = false, onClose 
     { id: 'audio', label: '🎵 Audio', icon: '🎵' },
     { id: 'transcript', label: '📝 Transcript', icon: '📝' },
     { id: 'ai-insights', label: '🤖 AI Insights', icon: '🤖' },
+    { id: 'analytics', label: '📊 Analytics', icon: '📊' },
     { id: 'code-context', label: '💻 Code Context', icon: '💻' },
     { id: 'qa', label: '💬 Voice Q&A', icon: '💬' },
     { id: 'blockchain', label: '🔗 Blockchain', icon: '🔗' },
@@ -365,13 +578,24 @@ export default function MeetingDetailView({ meetingId, isModal = false, onClose 
         <div className="p-6">
           {activeSection === 'overview' && (
             <div className="space-y-6">
+              {/* Audio Player */}
+              {audioUrl && (
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Audio Recording</h3>
+                  <AudioPlayer 
+                    audioUrl={audioUrl} 
+                    onTimeUpdate={setCurrentAudioTime}
+                  />
+                </div>
+              )}
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900 mb-4">Meeting Information</h3>
                   <div className="space-y-3">
                     <div>
                       <label className="block text-sm font-medium text-gray-700">Meeting ID</label>
-                      <p className="text-gray-900 font-mono text-sm">{meeting.meeting_id}</p>
+                      <p className="text-gray-900 font-mono text-sm">{meeting.id}</p>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700">Status</label>
@@ -379,34 +603,57 @@ export default function MeetingDetailView({ meetingId, isModal = false, onClose 
                         {meeting.status}
                       </span>
                     </div>
-                    {meeting.description && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Participants</label>
+                      <p className="text-gray-900">{meeting.participants_count} participants</p>
+                    </div>
+                    {meeting.audio_info && (
                       <div>
-                        <label className="block text-sm font-medium text-gray-700">Description</label>
-                        <p className="text-gray-900">{meeting.description}</p>
+                        <label className="block text-sm font-medium text-gray-700">Audio Info</label>
+                        <p className="text-gray-900">
+                          Duration: {Math.floor(meeting.audio_info.duration / 60)}:{(meeting.audio_info.duration % 60).toFixed(0).padStart(2, '0')} | 
+                          Format: {meeting.audio_info.format} | 
+                          Size: {(meeting.audio_info.file_size / 1024 / 1024).toFixed(1)} MB
+                        </p>
                       </div>
                     )}
                   </div>
                 </div>
                 
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Timeline</h3>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Timeline & Analytics</h3>
                   <div className="space-y-3">
-                    {meeting.created_at && (
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Created</label>
-                        <p className="text-gray-900">{new Date(meeting.created_at).toLocaleString()}</p>
-                      </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Created</label>
+                      <p className="text-gray-900">{new Date(meeting.createdAt).toLocaleString()}</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Duration</label>
+                      <p className="text-gray-900">{Math.floor(meeting.duration / 60)} minutes</p>
+                    </div>
+                    {meeting.analytics && (
+                      <>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Sentiment Score</label>
+                          <p className="text-gray-900">{(meeting.analytics.sentiment_score * 100).toFixed(1)}%</p>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Engagement Score</label>
+                          <p className="text-gray-900">{(meeting.analytics.engagement_score * 100).toFixed(1)}%</p>
+                        </div>
+                      </>
                     )}
-                    {meeting.start_time && (
+                    {meeting.processing_info && (
                       <div>
-                        <label className="block text-sm font-medium text-gray-700">Started</label>
-                        <p className="text-gray-900">{new Date(meeting.start_time).toLocaleString()}</p>
-                      </div>
-                    )}
-                    {meeting.end_time && (
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Ended</label>
-                        <p className="text-gray-900">{new Date(meeting.end_time).toLocaleString()}</p>
+                        <label className="block text-sm font-medium text-gray-700">Processing Status</label>
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                          meeting.processing_info.status === 'completed' ? 'bg-green-100 text-green-800' :
+                          meeting.processing_info.status === 'processing' ? 'bg-yellow-100 text-yellow-800' :
+                          meeting.processing_info.status === 'failed' ? 'bg-red-100 text-red-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {meeting.processing_info.status}
+                        </span>
                       </div>
                     )}
                   </div>
@@ -448,22 +695,51 @@ export default function MeetingDetailView({ meetingId, isModal = false, onClose 
             <div className="space-y-6">
               <h3 className="text-lg font-semibold text-gray-900">Audio Recording</h3>
               
-              {meeting.recording_url ? (
-                <div className="bg-gray-50 rounded-lg p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <h4 className="font-medium text-gray-900">Meeting Recording</h4>
-                      <p className="text-sm text-gray-500">High-quality audio recording of the meeting</p>
-                    </div>
-                    <button className="btn btn-primary">
-                      🎵 Download Audio
-                    </button>
-                  </div>
+              {audioUrl ? (
+                <div className="space-y-4">
+                  <AudioPlayer 
+                    audioUrl={audioUrl} 
+                    onTimeUpdate={setCurrentAudioTime}
+                  />
                   
-                  <audio controls className="w-full">
-                    <source src={meeting.recording_url} type="audio/mpeg" />
-                    Your browser does not support the audio element.
-                  </audio>
+                  {meeting.audio_info && (
+                    <div className="bg-gray-50 rounded-lg p-4">
+                      <h4 className="font-medium text-gray-900 mb-3">Audio Details</h4>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div>
+                          <span className="text-gray-500">Duration:</span>
+                          <p className="font-medium">{Math.floor(meeting.audio_info.duration / 60)}:{(meeting.audio_info.duration % 60).toFixed(0).padStart(2, '0')}</p>
+                        </div>
+                        <div>
+                          <span className="text-gray-500">Format:</span>
+                          <p className="font-medium">{meeting.audio_info.format}</p>
+                        </div>
+                        <div>
+                          <span className="text-gray-500">Size:</span>
+                          <p className="font-medium">{(meeting.audio_info.file_size / 1024 / 1024).toFixed(1)} MB</p>
+                        </div>
+                        <div>
+                          <span className="text-gray-500">Quality:</span>
+                          <p className="font-medium">{meeting.audio_info.sample_rate} Hz, {meeting.audio_info.channels}ch</p>
+                        </div>
+                      </div>
+                      
+                      <div className="mt-4 flex space-x-2">
+                        <button 
+                          onClick={() => VoiceLinkAPI.downloadMeetingData(meeting.id)}
+                          className="btn btn-primary text-sm"
+                        >
+                          📥 Download Audio
+                        </button>
+                        <button 
+                          onClick={() => VoiceLinkAPI.processAudioForMeeting(meeting.id)}
+                          className="btn btn-secondary text-sm"
+                        >
+                          🔄 Reprocess Audio
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-center">
@@ -491,7 +767,14 @@ export default function MeetingDetailView({ meetingId, isModal = false, onClose 
               {transcript.length > 0 ? (
                 <div className="space-y-4">
                   {transcript.map((segment, index) => (
-                    <div key={index} className="bg-gray-50 rounded-lg p-4">
+                    <div 
+                      key={index} 
+                      className={`bg-gray-50 rounded-lg p-4 transition-colors ${
+                        currentAudioTime >= segment.start_time && currentAudioTime <= segment.end_time 
+                          ? 'bg-blue-50 border-l-4 border-blue-500' 
+                          : ''
+                      }`}
+                    >
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center space-x-3">
                           <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white text-xs font-medium">
@@ -500,7 +783,20 @@ export default function MeetingDetailView({ meetingId, isModal = false, onClose 
                           <span className="font-medium text-gray-900">{segment.speaker}</span>
                         </div>
                         <div className="flex items-center space-x-2 text-xs text-gray-500">
-                          <span>{formatDuration(segment.start_time, segment.end_time)}</span>
+                          <button
+                            onClick={() => {
+                              // Seek to this timestamp in audio player
+                              if (audioUrl) {
+                                const audioElement = document.querySelector('audio');
+                                if (audioElement) {
+                                  audioElement.currentTime = segment.start_time;
+                                }
+                              }
+                            }}
+                            className="hover:text-blue-600 cursor-pointer"
+                          >
+                            🕐 {formatDuration(segment.start_time, segment.end_time)}
+                          </button>
                           {segment.confidence && (
                             <span className="bg-gray-200 px-2 py-1 rounded">
                               {Math.round(segment.confidence * 100)}% confidence
@@ -654,6 +950,236 @@ export default function MeetingDetailView({ meetingId, isModal = false, onClose 
                   </p>
                   <div className="text-xs text-gray-500">
                     Features in development: Automatic summarization, action item extraction, sentiment analysis
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeSection === 'analytics' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-gray-900">Meeting Analytics</h3>
+                <button 
+                  onClick={() => loadAnalytics()}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+                >
+                  🔄 Refresh Data
+                </button>
+              </div>
+
+              {analytics ? (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Participant Breakdown */}
+                  <div className="lg:col-span-2">
+                    <div className="bg-blue-50 rounded-lg p-6">
+                      <h4 className="font-semibold text-gray-900 mb-4 flex items-center">
+                        <span className="mr-2">👥</span>
+                        Participant Breakdown
+                      </h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {analytics.participant_breakdown.map((participant, index) => (
+                          <div key={index} className="bg-white rounded-lg p-4 border">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="font-medium text-gray-900">{participant.participant}</span>
+                              <span className="text-sm text-gray-600">{participant.speaking_percentage}%</span>
+                            </div>
+                            <div className="space-y-2 text-sm text-gray-600">
+                              <div>Speaking time: {participant.speaking_time} minutes</div>
+                              <div>Engagement: {participant.engagement_score}/100</div>
+                              <div>Questions asked: {participant.questions_asked}</div>
+                              <div>Interruptions: {participant.interruptions}</div>
+                            </div>
+                            <div className="mt-2 w-full bg-gray-200 rounded-full h-2">
+                              <div 
+                                className="bg-blue-500 h-2 rounded-full" 
+                                style={{ width: `${participant.speaking_percentage}%` }}
+                              ></div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Topics Discussed */}
+                  <div>
+                    <div className="bg-green-50 rounded-lg p-6">
+                      <h4 className="font-semibold text-gray-900 mb-4 flex items-center">
+                        <span className="mr-2">💬</span>
+                        Topics Discussed
+                      </h4>
+                      <div className="space-y-3">
+                        {analytics.topics_discussed.map((topic, index) => (
+                          <div key={index} className="bg-white rounded-lg p-3 border">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="font-medium text-gray-900">{topic.topic}</span>
+                              <span className="text-sm text-gray-600">{topic.frequency} mentions</span>
+                            </div>
+                            <div className="text-sm text-gray-600 mb-2">
+                              Sentiment: {topic.sentiment > 0.7 ? '😊 Positive' : topic.sentiment > 0.3 ? '😐 Neutral' : '😟 Negative'}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {topic.start_time !== undefined && topic.end_time !== undefined && (
+                                <>
+                                  Time: {Math.floor(topic.start_time / 60)}:{String(topic.start_time % 60).padStart(2, '0')} - 
+                                  {Math.floor(topic.end_time / 60)}:{String(topic.end_time % 60).padStart(2, '0')}
+                                </>
+                              )}
+                            </div>
+                            <div className="text-xs text-gray-500 mt-1">
+                              Participants: {topic.participants.join(', ')}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Action Items */}
+                  <div>
+                    <div className="bg-yellow-50 rounded-lg p-6">
+                      <h4 className="font-semibold text-gray-900 mb-4 flex items-center">
+                        <span className="mr-2">✅</span>
+                        Action Items
+                      </h4>
+                      <div className="space-y-3">
+                        {analytics.action_items.map((item, index) => (
+                          <div key={index} className="bg-white rounded-lg p-3 border">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="font-medium text-gray-900">{item.action}</span>
+                              <span className={`text-xs px-2 py-1 rounded-full ${
+                                item.status === 'completed' ? 'bg-green-100 text-green-800' :
+                                item.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
+                                'bg-gray-100 text-gray-800'
+                              }`}>
+                                {item.status}
+                              </span>
+                            </div>
+                            <div className="text-sm text-gray-600 mb-1">
+                              Assignee: {item.assignee}
+                            </div>
+                            <div className="text-sm text-gray-600 mb-1">
+                              Priority: <span className={`font-medium ${
+                                item.priority === 'high' ? 'text-red-600' :
+                                item.priority === 'medium' ? 'text-yellow-600' :
+                                'text-green-600'
+                              }`}>{item.priority}</span>
+                            </div>
+                            <div className="text-xs text-gray-500">{item.context}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Code Context */}
+                  <div className="lg:col-span-2">
+                    <div className="bg-purple-50 rounded-lg p-6">
+                      <h4 className="font-semibold text-gray-900 mb-4 flex items-center">
+                        <span className="mr-2">💻</span>
+                        Code Context Analysis
+                      </h4>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {/* Languages */}
+                        <div className="bg-white rounded-lg p-4 border">
+                          <h5 className="font-medium text-gray-900 mb-3">Languages Discussed</h5>
+                          <div className="space-y-2">
+                            {analytics.code_context.languages_mentioned.map((lang, index) => (
+                              <div key={index} className="text-sm">
+                                <div className="flex justify-between items-center">
+                                  <span className="font-medium">{lang.language}</span>
+                                  <span className="text-gray-600">{lang.frequency} mentions</span>
+                                </div>
+                                <div className="text-xs text-gray-500">
+                                  {lang.lines_discussed} lines discussed
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Repositories */}
+                        <div className="bg-white rounded-lg p-4 border">
+                          <h5 className="font-medium text-gray-900 mb-3">Repositories</h5>
+                          <div className="space-y-2">
+                            {analytics.code_context.repositories.map((repo, index) => (
+                              <div key={index} className="text-sm">
+                                <div className="font-medium">{repo.repo_name}</div>
+                                <div className="text-xs text-gray-500">
+                                  Issues: {repo.issues_mentioned.join(', ')}
+                                </div>
+                                <div className="text-xs text-gray-500">
+                                  Files: {repo.files_discussed.length} discussed
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Technical Concepts */}
+                        <div className="bg-white rounded-lg p-4 border">
+                          <h5 className="font-medium text-gray-900 mb-3">Technical Concepts</h5>
+                          <div className="space-y-2">
+                            {analytics.code_context.technical_concepts.map((concept, index) => (
+                              <div key={index} className="text-sm">
+                                <div className="flex justify-between items-center">
+                                  <span className="font-medium">{concept.concept}</span>
+                                  <span className="text-gray-600">{concept.frequency}</span>
+                                </div>
+                                <div className="text-xs text-gray-500">
+                                  Complexity: {concept.complexity_level}/10
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Summary Stats */}
+                  <div className="lg:col-span-2">
+                    <div className="bg-gray-50 rounded-lg p-6">
+                      <h4 className="font-semibold text-gray-900 mb-4 flex items-center">
+                        <span className="mr-2">📊</span>
+                        Summary Statistics
+                      </h4>
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                        <div className="text-center">
+                          <div className="text-2xl font-bold text-blue-600">{analytics.summary_stats.total_words}</div>
+                          <div className="text-sm text-gray-600">Total Words</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-2xl font-bold text-green-600">{analytics.summary_stats.average_speaking_speed}</div>
+                          <div className="text-sm text-gray-600">WPM Average</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-2xl font-bold text-yellow-600">{analytics.summary_stats.silence_percentage}%</div>
+                          <div className="text-sm text-gray-600">Silence</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-2xl font-bold text-purple-600">{analytics.summary_stats.energy_level}/10</div>
+                          <div className="text-sm text-gray-600">Energy Level</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-2xl font-bold text-indigo-600">{analytics.summary_stats.collaboration_score}%</div>
+                          <div className="text-sm text-gray-600">Collaboration</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 text-center">
+                  <div className="text-4xl mb-4">📊</div>
+                  <h4 className="font-medium text-gray-900 mb-2">Analytics Coming Soon</h4>
+                  <p className="text-sm text-gray-600 mb-4">
+                    Detailed analytics will provide participant breakdown, topic analysis, action item tracking, 
+                    and code context insights for this meeting.
+                  </p>
+                  <div className="text-xs text-gray-500">
+                    Features: Participant engagement, speaking time analysis, sentiment tracking, technical concept detection
                   </div>
                 </div>
               )}

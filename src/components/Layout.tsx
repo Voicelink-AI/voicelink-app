@@ -20,6 +20,40 @@ export default function Layout({ children, currentPage, onNavigate }: LayoutProp
     { id: 'settings', name: 'Settings', icon: '⚙️' },
   ];
 
+  // Scroll to top when page changes
+  useEffect(() => {
+    // Try multiple scroll targets to ensure we get to the top
+    const scrollToTop = () => {
+      // 1. Try to scroll the main content container
+      const mainContent = document.querySelector('.main-content');
+      if (mainContent) {
+        mainContent.scrollTop = 0;
+      }
+      
+      // 2. Try to scroll the content area
+      const contentArea = document.querySelector('.content-area');
+      if (contentArea) {
+        contentArea.scrollTop = 0;
+      }
+      
+      // 3. Try to scroll any scrollable parent
+      const appLayout = document.querySelector('.app-layout');
+      if (appLayout) {
+        appLayout.scrollTop = 0;
+      }
+      
+      // 4. Scroll the document body
+      document.body.scrollTop = 0;
+      document.documentElement.scrollTop = 0;
+      
+      // 5. Window scroll as final fallback
+      window.scrollTo(0, 0);
+    };
+    
+    // Use setTimeout to ensure DOM is updated
+    setTimeout(scrollToTop, 0);
+  }, [currentPage]);
+
   useEffect(() => {
     const checkApiStatus = async () => {
       try {
@@ -66,7 +100,7 @@ export default function Layout({ children, currentPage, onNavigate }: LayoutProp
       {/* Sidebar */}
       <div className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
         <div className="sidebar-header">
-          <div className="sidebar-logo">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '1.25rem', fontWeight: '700', color: 'var(--primary-blue)' }}>
             🎙️ <span>VoiceLink</span>
           </div>
         </div>

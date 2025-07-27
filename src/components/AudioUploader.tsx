@@ -3,6 +3,9 @@ import { VoiceLinkAPI } from '../services/api';
 
 interface AudioUploaderProps {
   onFileUpload: (file: File, meetingId?: string) => void;
+  onNavigateToMeeting?: (meetingId: string) => void;
+  onNavigateToMeetings?: () => void;
+  onNavigateToChat?: (meetingId: string) => void;
   isProcessing?: boolean;
 }
 
@@ -13,7 +16,13 @@ interface ProcessingResult {
   error?: string;
 }
 
-export default function AudioUploader({ onFileUpload, isProcessing = false }: AudioUploaderProps) {
+export default function AudioUploader({ 
+  onFileUpload, 
+  onNavigateToMeeting,
+  onNavigateToMeetings,
+  onNavigateToChat,
+  isProcessing = false 
+}: AudioUploaderProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -194,14 +203,14 @@ export default function AudioUploader({ onFileUpload, isProcessing = false }: Au
   };
 
   const navigateToMeeting = () => {
-    if (processingResult?.meeting?.meeting_id) {
-      window.location.hash = `/meetings/${processingResult.meeting.meeting_id}`;
+    if (processingResult?.meeting?.meeting_id && onNavigateToMeeting) {
+      onNavigateToMeeting(processingResult.meeting.meeting_id);
     }
   };
 
   const navigateToChat = () => {
-    if (processingResult?.meeting?.meeting_id) {
-      window.location.hash = `/chat?meeting=${processingResult.meeting.meeting_id}`;
+    if (processingResult?.meeting?.meeting_id && onNavigateToChat) {
+      onNavigateToChat(processingResult.meeting.meeting_id);
     }
   };
 
@@ -209,7 +218,7 @@ export default function AudioUploader({ onFileUpload, isProcessing = false }: Au
     <div className="audio-uploader">
       <div className="flex justify-between items-center mb-4">
         <h3 className="text-lg font-semibold text-gray-900">Upload Audio File</h3>
-        {uploadedFile && processingStage === 'complete' && (
+        {uploadedFile && processingStage === 'complete' && !isProcessing && (
           <button onClick={resetUpload} className="btn btn-secondary text-sm">
             Upload Another File
           </button>
@@ -234,12 +243,12 @@ export default function AudioUploader({ onFileUpload, isProcessing = false }: Au
       )}
       
       <div
-        className={`upload-zone ${isDragging ? 'dragging' : ''} ${processingStage !== 'idle' ? 'processing' : ''}`}
+        className={`upload-zone ${isDragging ? 'dragging' : ''} ${processingStage !== 'idle' || isProcessing ? 'processing' : ''}`}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        onClick={() => processingStage === 'idle' && fileInputRef.current?.click()}
-        style={{ cursor: processingStage === 'idle' ? 'pointer' : 'default' }}
+        onClick={() => (processingStage === 'idle' && !isProcessing) && fileInputRef.current?.click()}
+        style={{ cursor: (processingStage === 'idle' && !isProcessing) ? 'pointer' : 'default' }}
       >
         <input
           ref={fileInputRef}
@@ -247,7 +256,7 @@ export default function AudioUploader({ onFileUpload, isProcessing = false }: Au
           accept={acceptedFormats.join(',')}
           onChange={handleFileInputChange}
           style={{ display: 'none' }}
-          disabled={processingStage !== 'idle'}
+          disabled={processingStage !== 'idle' || isProcessing}
         />
         
         {uploadedFile ? (
@@ -342,7 +351,7 @@ export default function AudioUploader({ onFileUpload, isProcessing = false }: Au
                   </button>
                   
                   <button
-                    onClick={() => window.location.hash = '/meetings'}
+                    onClick={() => onNavigateToMeetings && onNavigateToMeetings()}
                     className="btn btn-secondary text-xs px-3 py-1"
                   >
                     📝 All Meetings

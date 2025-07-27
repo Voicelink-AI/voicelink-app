@@ -4,9 +4,16 @@ import { type MeetingResponse } from '../services/api';
 interface MeetingDetailsModalProps {
   meeting: MeetingResponse;
   onClose: () => void;
+  onNavigateToMeeting?: (meetingId: string) => void;
+  onNavigateToChat?: (meetingId: string) => void;
 }
 
-export default function MeetingDetailsModal({ meeting, onClose }: MeetingDetailsModalProps) {
+export default function MeetingDetailsModal({ 
+  meeting, 
+  onClose, 
+  onNavigateToMeeting, 
+  onNavigateToChat 
+}: MeetingDetailsModalProps) {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'active': return 'bg-green-100 text-green-800';
@@ -104,28 +111,35 @@ export default function MeetingDetailsModal({ meeting, onClose }: MeetingDetails
         </div>
 
         {/* Modal Footer */}
-        <div className="modal-footer">
+        <div className="modal-footer flex-wrap gap-3">
           <button 
-            onClick={() => window.location.hash = `/meeting-detail?id=${meeting.meeting_id}`}
-            className="btn btn-primary"
+            onClick={() => {
+              console.log('Navigating to meeting:', meeting.meeting_id);
+              onNavigateToMeeting?.(meeting.meeting_id);
+              onClose();
+            }}
+            className="btn btn-primary flex-1 min-w-0"
           >
-            📋 Full Detail View
+            📋 View Details
           </button>
           <button 
-            onClick={() => window.location.hash = `/chat?meeting=${meeting.meeting_id}`}
-            className="btn btn-primary"
+            onClick={() => {
+              onNavigateToChat?.(meeting.meeting_id);
+              onClose();
+            }}
+            className="btn btn-primary flex-1 min-w-0"
           >
             💬 Chat about this meeting
           </button>
           <button 
-            onClick={() => window.location.hash = `/blockchain?meeting=${meeting.meeting_id}`}
-            className="btn btn-secondary"
+            onClick={() => console.log('Blockchain verification for:', meeting.meeting_id)}
+            className="btn btn-secondary flex-1 min-w-0"
           >
             🔗 Blockchain verification
           </button>
           <button 
             onClick={onClose}
-            className="btn btn-secondary"
+            className="btn btn-secondary w-full sm:w-auto"
           >
             Close
           </button>

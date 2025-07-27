@@ -1,14 +1,21 @@
 import { useState, useEffect } from 'react';
 import { VoiceLinkAPI, type MeetingResponse, type MeetingCreateRequest } from '../services/api';
+import type { Meeting } from '../types';
 import CreateMeetingModal from './CreateMeetingModal';
 import MeetingDetailsModal from './MeetingDetailsModal';
 
 interface MeetingDashboardProps {
   onSelectMeeting?: (meetingId: string) => void;
+  onNavigateToMeeting?: (meetingId: string) => void;
+  onNavigateToChat?: (meetingId: string) => void;
 }
 
-export default function MeetingDashboard({ onSelectMeeting }: MeetingDashboardProps) {
-  const [meetings, setMeetings] = useState<MeetingResponse[]>([]);
+export default function MeetingDashboard({ 
+  onSelectMeeting, 
+  onNavigateToMeeting, 
+  onNavigateToChat 
+}: MeetingDashboardProps) {
+  const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>('');
@@ -22,7 +29,24 @@ export default function MeetingDashboard({ onSelectMeeting }: MeetingDashboardPr
     try {
       setLoading(true);
       const data = await VoiceLinkAPI.getMeetings(filter || undefined);
-      setMeetings(data);
+      
+      // Transform MeetingResponse[] to Meeting[]
+      const transformedMeetings: Meeting[] = data.map((meetingResponse: MeetingResponse) => ({
+        id: meetingResponse.meeting_id,
+        title: meetingResponse.title,
+        duration: 0, // Will be updated when audio info is available
+        participants: meetingResponse.participants?.map(p => typeof p === 'string' ? p : p.email || 'Unknown') || [],
+        participants_count: meetingResponse.participants?.length || 0,
+        status: meetingResponse.status,
+        createdAt: meetingResponse.created_at || new Date().toISOString(),
+        audioFileName: meetingResponse.recording_url,
+        // Enhanced fields will be populated by individual meeting calls if needed
+        audio_info: undefined,
+        analytics: undefined,
+        processing_info: undefined,
+      }));
+      
+      setMeetings(transformedMeetings);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load meetings');
@@ -173,13 +197,15 @@ export default function MeetingDashboard({ onSelectMeeting }: MeetingDashboardPr
         <div className="meetings-grid">
           {meetings.map((meeting, index) => (
             <MeetingCard
-              key={meeting.meeting_id || index}
+              key={meeting.id || index}
               meeting={meeting}
-              onStart={() => handleStartMeeting(meeting.meeting_id)}
-              onEnd={() => handleEndMeeting(meeting.meeting_id)}
-              onPause={() => handlePauseMeeting(meeting.meeting_id)}
-              onResume={() => handleResumeMeeting(meeting.meeting_id)}
+              onStart={() => handleStartMeeting(meeting.id)}
+              onEnd={() => handleEndMeeting(meeting.id)}
+              onPause={() => handlePauseMeeting(meeting.id)}
+              onResume={() => handleResumeMeeting(meeting.id)}
               onSelectMeeting={onSelectMeeting}
+              onNavigateToMeeting={onNavigateToMeeting}
+              onNavigateToChat={onNavigateToChat}
             />
           ))}
         </div>
@@ -211,15 +237,17 @@ export default function MeetingDashboard({ onSelectMeeting }: MeetingDashboardPr
 }
 
 interface MeetingCardProps {
-  meeting: MeetingResponse;
+  meeting: Meeting;
   onStart: () => void;
   onEnd: () => void;
   onPause: () => void;
   onResume: () => void;
   onSelectMeeting?: (meetingId: string) => void;
+  onNavigateToMeeting?: (meetingId: string) => void;
+  onNavigateToChat?: (meetingId: string) => void;
 }
 
-function MeetingCard({ meeting, onStart, onEnd, onPause, onResume, onSelectMeeting }: MeetingCardProps) {
+function MeetingCard({ meeting, onStart, onEnd, onPause, onResume, onSelectMeeting, onNavigateToMeeting, onNavigateToChat }: MeetingCardProps) {
   const [showDetails, setShowDetails] = useState(false);
   const [meetingDetails, setMeetingDetails] = useState<any>(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
@@ -227,7 +255,7 @@ function MeetingCard({ meeting, onStart, onEnd, onPause, onResume, onSelectMeeti
   const handleViewDetails = async () => {
     try {
       setLoadingDetails(true);
-      const details = await VoiceLinkAPI.getMeeting(meeting.meeting_id);
+      const details = await VoiceLinkAPI.getMeetingWithEnhancedData(meeting.id);
       setMeetingDetails(details);
       setShowDetails(true);
     } catch (error) {
@@ -248,11 +276,6 @@ function MeetingCard({ meeting, onStart, onEnd, onPause, onResume, onSelectMeeti
       case 'cancelled': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
     }
-  };
-
-  const formatTime = (timeString?: string) => {
-    if (!timeString) return 'Not set';
-    return new Date(timeString).toLocaleString();
   };
 
   const getActionButtons = () => {
@@ -306,11 +329,14 @@ function MeetingCard({ meeting, onStart, onEnd, onPause, onResume, onSelectMeeti
 
         <div className="meeting-meta">
           <p className="meta-item">
-            👥 {meeting.participants.length} participants
+            👥 {meeting.participants_count} participants
           </p>
-          {meeting.start_time && (
+          <p className="meta-item">
+            📅 {new Date(meeting.createdAt).toLocaleDateString()}
+          </p>
+          {meeting.duration > 0 && (
             <p className="meta-item">
-              📅 {formatTime(meeting.start_time)}
+              ⏱️ {Math.floor(meeting.duration / 60)} min
             </p>
           )}
         </div>
@@ -329,7 +355,7 @@ function MeetingCard({ meeting, onStart, onEnd, onPause, onResume, onSelectMeeti
           {onSelectMeeting && (
             <button 
               onClick={() => {
-                onSelectMeeting(meeting.meeting_id);
+                onSelectMeeting(meeting.id);
                 // If there's a way to navigate to the meeting-detail page, call it here
                 // For now, we'll assume the parent component handles navigation
               }}
@@ -346,6 +372,8 @@ function MeetingCard({ meeting, onStart, onEnd, onPause, onResume, onSelectMeeti
         <MeetingDetailsModal
           meeting={meetingDetails}
           onClose={() => setShowDetails(false)}
+          onNavigateToMeeting={onNavigateToMeeting}
+          onNavigateToChat={onNavigateToChat}
         />
       )}
     </>
