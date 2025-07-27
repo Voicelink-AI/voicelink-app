@@ -1,5 +1,7 @@
 import { useState, type ReactNode, useEffect } from 'react';
 import { VoiceLinkAPI } from '../services/api';
+import { useTheme } from '../contexts/ThemeContext';
+import { useTranslation } from '../utils/translations';
 
 interface LayoutProps {
   children: ReactNode;
@@ -10,14 +12,16 @@ interface LayoutProps {
 export default function Layout({ children, currentPage, onNavigate }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [apiStatus, setApiStatus] = useState<'connected' | 'connecting' | 'disconnected'>('connecting');
+  const { language } = useTheme();
+  const { t } = useTranslation(language);
 
   const navigation = [
-    { id: 'dashboard', name: 'Dashboard', icon: '🏠' },
-    { id: 'meetings', name: 'Meetings', icon: '📋' },
-    { id: 'analytics', name: 'Analytics', icon: '📊' },
-    { id: 'chat', name: 'AI Assistant', icon: '💬' },
-    { id: 'system-monitor', name: 'System Monitor', icon: '🔧' },
-    { id: 'settings', name: 'Settings', icon: '⚙️' },
+    { id: 'dashboard', name: t('nav.dashboard'), icon: '🏠' },
+    { id: 'meetings', name: t('nav.meetings'), icon: '📋' },
+    { id: 'analytics', name: t('nav.analytics'), icon: '📊' },
+    { id: 'chat', name: t('nav.chat'), icon: '💬' },
+    { id: 'system-monitor', name: t('nav.systemMonitor'), icon: '🔧' },
+    { id: 'settings', name: t('nav.settings'), icon: '⚙️' },
   ];
 
   // Scroll to top when page changes

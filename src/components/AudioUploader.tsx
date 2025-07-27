@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { VoiceLinkAPI } from '../services/api';
+import { useTranslation } from '../hooks/useTranslation';
 
 interface AudioUploaderProps {
   onFileUpload: (file: File, meetingId?: string) => void;
@@ -23,6 +24,7 @@ export default function AudioUploader({
   onNavigateToChat,
   isProcessing = false 
 }: AudioUploaderProps) {
+  const { t } = useTranslation();
   const [isDragging, setIsDragging] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -161,10 +163,10 @@ export default function AudioUploader({
 
   const getProcessingMessage = () => {
     switch (processingStage) {
-      case 'uploading': return 'Uploading audio file...';
-      case 'creating_meeting': return 'Creating meeting from audio file...';
-      case 'complete': return 'Upload complete!';
-      case 'error': return 'Processing failed';
+      case 'uploading': return t('uploader.uploading');
+      case 'creating_meeting': return t('uploader.creatingMeeting');
+      case 'complete': return t('uploader.uploadComplete');
+      case 'error': return t('uploader.processingFailed');
       default: return '';
     }
   };
@@ -271,7 +273,7 @@ export default function AudioUploader({
             {(processingStage === 'uploading') && (
               <div className="mt-4 w-full max-w-md">
                 <div className="flex justify-between text-sm text-gray-600 mb-1">
-                  <span>Uploading...</span>
+                  <span>{t('uploader.uploading')}</span>
                   <span>{uploadProgress}%</span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
@@ -304,31 +306,31 @@ export default function AudioUploader({
               <div className="mt-4 space-y-3">
                 <div className="flex items-center gap-2 text-green-600">
                   <span>✅</span>
-                  <span className="text-sm font-medium">Meeting created successfully!</span>
+                  <span className="text-sm font-medium">{t('uploader.meetingCreatedSuccess')}</span>
                 </div>
                 
                 <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-left max-w-md">
-                  <h4 className="text-sm font-medium text-green-800 mb-2">Meeting Details:</h4>
+                  <h4 className="text-sm font-medium text-green-800 mb-2">{t('uploader.meetingDetails')}</h4>
                   
                   <div className="space-y-2 text-xs">
                     <div>
-                      <p className="font-medium text-green-700">Title:</p>
+                      <p className="font-medium text-green-700">{t('uploader.title')}</p>
                       <p className="text-green-600">{processingResult.meeting.title}</p>
                     </div>
                     
                     <div>
-                      <p className="font-medium text-green-700">Meeting ID:</p>
+                      <p className="font-medium text-green-700">{t('uploader.meetingId')}</p>
                       <p className="text-green-600 font-mono">{processingResult.meeting.meeting_id}</p>
                     </div>
                     
                     <div>
-                      <p className="font-medium text-green-700">Status:</p>
+                      <p className="font-medium text-green-700">{t('uploader.status')}</p>
                       <p className="text-green-600 capitalize">{processingResult.meeting.status}</p>
                     </div>
                     
                     {processingResult.upload?.file_id && (
                       <div>
-                        <p className="font-medium text-green-700">File ID:</p>
+                        <p className="font-medium text-green-700">{t('uploader.fileId')}</p>
                         <p className="text-green-600 font-mono text-xs">{processingResult.upload.file_id}</p>
                       </div>
                     )}
@@ -340,21 +342,21 @@ export default function AudioUploader({
                     onClick={navigateToMeeting}
                     className="btn btn-primary text-xs px-3 py-1"
                   >
-                    📋 View Meeting
+                    📋 {t('uploader.viewMeeting')}
                   </button>
                   
                   <button
                     onClick={navigateToChat}
                     className="btn btn-secondary text-xs px-3 py-1"
                   >
-                    💬 Ask Questions
+                    💬 {t('uploader.askQuestions')}
                   </button>
                   
                   <button
                     onClick={() => onNavigateToMeetings && onNavigateToMeetings()}
                     className="btn btn-secondary text-xs px-3 py-1"
                   >
-                    📝 All Meetings
+                    📝 {t('uploader.allMeetings')}
                   </button>
                 </div>
               </div>
@@ -364,20 +366,20 @@ export default function AudioUploader({
           <div className="upload-prompt">
             <div className="text-4xl mb-4">🎵</div>
             <p className="text-lg font-medium text-gray-700 mb-2">
-              Drop your audio file here or click to browse
+              {t('uploader.dropAudioHere')}
             </p>
             <p className="text-gray-500 mb-4">
-              Supports {acceptedFormats.join(', ')} • Max size: 100MB
+              {t('uploader.supportsFormats', { formats: acceptedFormats.join(', ') })}
             </p>
             <p className="text-sm text-blue-600">
-              ✨ A meeting will be automatically created from your audio file
+              {t('uploader.autoCreateMeeting')}
             </p>
           </div>
         )}
       </div>
       
       <div className="mt-4 text-xs text-gray-500">
-        <p>💡 <strong>New Workflow:</strong> Upload → Auto-create meeting → View results → Chat about content</p>
+        <p>{t('uploader.newWorkflow')}</p>
       </div>
     </div>
   );

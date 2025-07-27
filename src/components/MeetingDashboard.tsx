@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { VoiceLinkAPI, type MeetingResponse, type MeetingCreateRequest } from '../services/api';
 import type { Meeting } from '../types';
+import { useTheme } from '../contexts/ThemeContext';
+import { useTranslation } from '../hooks/useTranslation';
 import CreateMeetingModal from './CreateMeetingModal';
 import MeetingDetailsModal from './MeetingDetailsModal';
 
@@ -15,6 +17,7 @@ export default function MeetingDashboard({
   onNavigateToMeeting, 
   onNavigateToChat 
 }: MeetingDashboardProps) {
+  const { t } = useTranslation();
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -132,7 +135,7 @@ export default function MeetingDashboard({
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-        <span className="ml-2">Loading meetings...</span>
+        <span className="ml-2">{t('meetings.loadingMeetings')}</span>
       </div>
     );
   }
@@ -141,12 +144,12 @@ export default function MeetingDashboard({
     <div className="space-y-6">
       {/* Header */}
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-gray-900">Meetings</h2>
+        <h2 className="text-2xl font-bold text-gray-900">{t('meetings.title')}</h2>
         <button
           onClick={() => setShowCreateForm(true)}
           className="btn btn-primary"
         >
-          📅 Create Meeting
+          📅 {t('meetings.createMeeting')}
         </button>
       </div>
 
@@ -156,13 +159,13 @@ export default function MeetingDashboard({
           <div className="flex">
             <div className="text-red-400">❌</div>
             <div className="ml-3">
-              <h3 className="text-sm font-medium text-red-800">Error</h3>
+              <h3 className="text-sm font-medium text-red-800">{t('meetings.error')}</h3>
               <p className="mt-1 text-sm text-red-700">{error}</p>
               <button 
                 onClick={() => setError(null)}
                 className="mt-2 text-xs text-red-600 hover:text-red-800 underline"
               >
-                Dismiss
+                {t('meetings.dismiss')}
               </button>
             </div>
           </div>
@@ -176,19 +179,19 @@ export default function MeetingDashboard({
           onChange={(e) => setFilter(e.target.value)}
           className="form-select"
         >
-          <option value="">All Meetings</option>
-          <option value="scheduled">Scheduled</option>
-          <option value="active">Active</option>
-          <option value="paused">Paused</option>
-          <option value="completed">Completed</option>
-          <option value="cancelled">Cancelled</option>
+          <option value="">{t('meetings.allMeetings')}</option>
+          <option value="scheduled">{t('meetings.scheduled')}</option>
+          <option value="active">{t('meetings.active')}</option>
+          <option value="paused">{t('meetings.paused')}</option>
+          <option value="completed">{t('meetings.completed')}</option>
+          <option value="cancelled">{t('meetings.cancelled')}</option>
         </select>
         
         <button
           onClick={loadMeetings}
           className="btn btn-secondary"
         >
-          🔄 Refresh
+          🔄 {t('meetings.refresh')}
         </button>
       </div>
 
@@ -212,15 +215,18 @@ export default function MeetingDashboard({
       ) : (
         <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
           <div className="text-4xl mb-4">📋</div>
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No meetings found</h3>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">{t('meetings.noMeetingsFound')}</h3>
           <p className="text-gray-500 mb-4">
-            {filter ? `No ${filter} meetings found` : 'Create your first meeting to get started'}
+            {filter 
+              ? t('meetings.noFilteredMeetings', { filter: t(`meetings.${filter}`) || filter })
+              : t('meetings.createFirstMeeting')
+            }
           </p>
           <button
             onClick={() => setShowCreateForm(true)}
             className="btn btn-primary"
           >
-            Create First Meeting
+            {t('meetings.createFirstMeetingBtn')}
           </button>
         </div>
       )}
@@ -248,6 +254,7 @@ interface MeetingCardProps {
 }
 
 function MeetingCard({ meeting, onStart, onEnd, onPause, onResume, onSelectMeeting, onNavigateToMeeting, onNavigateToChat }: MeetingCardProps) {
+  const { t } = useTranslation();
   const [showDetails, setShowDetails] = useState(false);
   const [meetingDetails, setMeetingDetails] = useState<any>(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
@@ -283,17 +290,17 @@ function MeetingCard({ meeting, onStart, onEnd, onPause, onResume, onSelectMeeti
       case 'scheduled':
         return (
           <button onClick={onStart} className="btn btn-primary">
-            ▶️ Start Meeting
+            ▶️ {t('meetings.startMeeting')}
           </button>
         );
       case 'active':
         return (
           <>
             <button onClick={onPause} className="btn btn-secondary">
-              ⏸️ Pause
+              ⏸️ {t('meetings.pause')}
             </button>
             <button onClick={onEnd} className="btn btn-secondary">
-              ⏹️ End Meeting
+              ⏹️ {t('meetings.endMeeting')}
             </button>
           </>
         );
@@ -301,16 +308,16 @@ function MeetingCard({ meeting, onStart, onEnd, onPause, onResume, onSelectMeeti
         return (
           <>
             <button onClick={onResume} className="btn btn-primary">
-              ▶️ Resume
+              ▶️ {t('meetings.resume')}
             </button>
             <button onClick={onEnd} className="btn btn-secondary">
-              ⏹️ End Meeting
+              ⏹️ {t('meetings.endMeeting')}
             </button>
           </>
         );
       case 'completed':
         return (
-          <div className="text-sm text-gray-500">Meeting completed</div>
+          <div className="text-sm text-gray-500">{t('meetings.meetingCompleted')}</div>
         );
       default:
         return null;
@@ -323,20 +330,20 @@ function MeetingCard({ meeting, onStart, onEnd, onPause, onResume, onSelectMeeti
         <div className="meeting-header">
           <h3 className="meeting-title">{meeting.title}</h3>
           <span className={`status-badge ${getStatusColor(meeting.status)}`}>
-            {meeting.status}
+            {t(`meetings.${meeting.status}`) || meeting.status}
           </span>
         </div>
 
         <div className="meeting-meta">
           <p className="meta-item">
-            👥 {meeting.participants_count} participants
+            👥 {meeting.participants_count} {t('meetings.participants')}
           </p>
           <p className="meta-item">
             📅 {new Date(meeting.createdAt).toLocaleDateString()}
           </p>
           {meeting.duration > 0 && (
             <p className="meta-item">
-              ⏱️ {Math.floor(meeting.duration / 60)} min
+              ⏱️ {Math.floor(meeting.duration / 60)} {t('meetings.minutes')}
             </p>
           )}
         </div>
@@ -349,7 +356,7 @@ function MeetingCard({ meeting, onStart, onEnd, onPause, onResume, onSelectMeeti
             disabled={loadingDetails}
             className="btn btn-secondary"
           >
-            {loadingDetails ? '⏳' : '👁️'} View Details
+            {loadingDetails ? '⏳' : '👁️'} {t('meetings.viewDetails')}
           </button>
           
           {onSelectMeeting && (
@@ -361,7 +368,7 @@ function MeetingCard({ meeting, onStart, onEnd, onPause, onResume, onSelectMeeti
               }}
               className="btn btn-primary"
             >
-              📋 Detailed View
+              📋 {t('meetings.detailedView')}
             </button>
           )}
         </div>

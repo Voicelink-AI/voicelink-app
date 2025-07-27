@@ -1,7 +1,6 @@
-import { useState, useEffect } from 'react';
-import { VoiceLinkAPI } from '../services/api';
+import { useState } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
-import { useTranslation } from '../utils/translations';
+import { useTranslation } from '../hooks/useTranslation';
 import APIDebugger from './APIDebugger';
 import EndpointTester from './EndpointTester';
 import TestUploadComponent from './TestUploadComponent';
@@ -32,12 +31,8 @@ interface SettingsState {
 export default function Settings() {
   const { theme: currentTheme, setTheme, language: currentLanguage, setLanguage, notifications: currentNotifications, setNotifications } = useTheme();
   
-  // Local preview state - not applied until save
-  const [previewTheme, setPreviewTheme] = useState<'light' | 'dark' | 'auto'>(currentTheme);
-  const [previewLanguage, setPreviewLanguage] = useState(currentLanguage);
-  const [previewNotifications, setPreviewNotifications] = useState(currentNotifications);
-  
-  const { t } = useTranslation(previewLanguage);
+  // Use current language for translations (no preview needed)
+  const { t } = useTranslation();
   
   const [settings, setSettings] = useState<SettingsState>({
     apiSettings: {
@@ -62,41 +57,6 @@ export default function Settings() {
     },
   });
 
-  const [isSaving, setIsSaving] = useState(false);
-
-  const handleSave = async () => {
-    setIsSaving(true);
-    
-    try {
-      // Apply theme and language changes
-      setTheme(previewTheme);
-      setLanguage(previewLanguage);
-      setNotifications(previewNotifications);
-      
-      // Update local settings state
-      setSettings(prev => ({
-        ...prev,
-        uiSettings: {
-          theme: previewTheme,
-          language: previewLanguage,
-          notifications: previewNotifications,
-        }
-      }));
-      
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Save to localStorage for demo
-      localStorage.setItem('voicelink-settings', JSON.stringify(settings));
-      
-      alert('Settings saved successfully! Theme and language changes applied.');
-    } catch (error) {
-      alert('Failed to save settings. Please try again.');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
   const updateSettings = (section: keyof SettingsState, key: string, value: any) => {
     setSettings(prev => ({
       ...prev,
@@ -111,17 +71,14 @@ export default function Settings() {
     <div className="settings-container">
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-gray-900 mb-2">{t('settings.title')}</h2>
-        <p className="text-gray-600">Configure VoiceLink to match your workflow and preferences.</p>
-        <div className="text-sm text-gray-500 mt-2">
-          Preview: {t('settings.language')}: {previewLanguage.toUpperCase()} | {t('settings.theme')}: {previewTheme}
-        </div>
+        <p className="text-gray-600">{t('settings.description')}</p>
       </div>
 
       {/* API Settings */}
       <div className="settings-section">
-        <h3>🔗 API Configuration</h3>
+        <h3>{t('settings.apiConfiguration')}</h3>
         <div className="form-group">
-          <label className="form-label">API Base URL</label>
+          <label className="form-label">{t('settings.apiBaseUrl')}</label>
           <input
             type="url"
             className="form-input"
@@ -129,11 +86,11 @@ export default function Settings() {
             onChange={(e) => updateSettings('apiSettings', 'baseUrl', e.target.value)}
             placeholder="http://localhost:8000"
           />
-          <p className="form-description">Base URL for the VoiceLink API server</p>
+          <p className="form-description">{t('settings.apiBaseUrlDescription')}</p>
         </div>
         
         <div className="form-group">
-          <label className="form-label">Request Timeout (ms)</label>
+          <label className="form-label">{t('settings.requestTimeout')}</label>
           <input
             type="number"
             className="form-input"
@@ -142,25 +99,25 @@ export default function Settings() {
             min="5000"
             max="300000"
           />
-          <p className="form-description">Maximum time to wait for API responses</p>
+          <p className="form-description">{t('settings.requestTimeoutDescription')}</p>
         </div>
       </div>
 
       {/* Processing Settings */}
       <div className="settings-section">
-        <h3>⚡ Processing Options</h3>
+        <h3>{t('settings.processingOptions')}</h3>
         <div className="form-group">
-          <label className="form-label">Audio Quality</label>
+          <label className="form-label">{t('settings.audioQuality')}</label>
           <select
             className="form-select"
             value={settings.processingSettings.audioQuality}
             onChange={(e) => updateSettings('processingSettings', 'audioQuality', e.target.value)}
           >
-            <option value="low">Low (Faster processing)</option>
-            <option value="medium">Medium (Balanced)</option>
-            <option value="high">High (Best accuracy)</option>
+            <option value="low">{t('settings.audioQualityLow')}</option>
+            <option value="medium">{t('settings.audioQualityMedium')}</option>
+            <option value="high">{t('settings.audioQualityHigh')}</option>
           </select>
-          <p className="form-description">Higher quality provides better transcription accuracy but takes longer</p>
+          <p className="form-description">{t('settings.audioQualityDescription')}</p>
         </div>
         
         <div className="form-group">
@@ -171,9 +128,9 @@ export default function Settings() {
               onChange={(e) => updateSettings('processingSettings', 'speakerDetection', e.target.checked)}
               className="w-4 h-4"
             />
-            <span className="form-label mb-0">Enable Speaker Detection</span>
+            <span className="form-label mb-0">{t('settings.speakerDetection')}</span>
           </label>
-          <p className="form-description">Identify and separate different speakers in the audio</p>
+          <p className="form-description">{t('settings.speakerDetectionDescription')}</p>
         </div>
         
         <div className="form-group">
@@ -184,35 +141,35 @@ export default function Settings() {
               onChange={(e) => updateSettings('processingSettings', 'codeDetection', e.target.checked)}
               className="w-4 h-4"
             />
-            <span className="form-label mb-0">Enable Code Context Detection</span>
+            <span className="form-label mb-0">{t('settings.codeDetection')}</span>
           </label>
-          <p className="form-description">Detect mentions of GitHub issues, PRs, and technical terms</p>
+          <p className="form-description">{t('settings.codeDetectionDescription')}</p>
         </div>
       </div>
 
       {/* UI Settings */}
       <div className="settings-section">
-        <h3>🎨 Interface</h3>
+        <h3>{t('settings.interface')}</h3>
         <div className="form-group">
           <label className="form-label">{t('settings.theme')}</label>
           <select
             className="form-select"
-            value={previewTheme}
-            onChange={(e) => setPreviewTheme(e.target.value as 'light' | 'dark' | 'auto')}
+            value={currentTheme}
+            onChange={(e) => setTheme(e.target.value as 'light' | 'dark' | 'auto')}
           >
             <option value="light">☀️ {t('settings.lightTheme')}</option>
             <option value="dark">🌙 {t('settings.darkTheme')}</option>
             <option value="auto">🔄 {t('settings.autoTheme')}</option>
           </select>
-          <p className="form-description">{t('settings.themePreviewDescription')}</p>
+          <p className="form-description">Choose your preferred color scheme (changes apply immediately)</p>
         </div>
         
         <div className="form-group">
           <label className="form-label">{t('settings.language')}</label>
           <select
             className="form-select"
-            value={previewLanguage}
-            onChange={(e) => setPreviewLanguage(e.target.value as any)}
+            value={currentLanguage}
+            onChange={(e) => setLanguage(e.target.value as any)}
           >
             <option value="en">🇺🇸 English</option>
             <option value="es">🇪🇸 Español</option>
@@ -224,74 +181,26 @@ export default function Settings() {
             <option value="ko">🇰🇷 한국어</option>
             <option value="zh">🇨🇳 中文</option>
           </select>
-          <p className="form-description">{t('settings.languageDescription')}</p>
+          <p className="form-description">Select your preferred language (changes apply immediately)</p>
         </div>
         
         <div className="form-group">
           <label className="flex items-center gap-3">
             <input
               type="checkbox"
-              checked={previewNotifications}
-              onChange={(e) => setPreviewNotifications(e.target.checked)}
+              checked={currentNotifications}
+              onChange={(e) => setNotifications(e.target.checked)}
               className="w-4 h-4"
             />
             <span className="form-label mb-0">{t('settings.notifications')}</span>
           </label>
           <p className="form-description">{t('settings.notificationsDescription')}</p>
         </div>
-
-        {/* Theme Preview */}
-        <div className="form-group">
-          <label className="form-label">{t('settings.themePreview')}</label>
-          <div className="grid grid-cols-3 gap-3">
-            <div className={`text-center cursor-pointer p-2 rounded-lg border ${previewTheme === 'light' ? 'ring-2 ring-blue-500' : 'border-gray-200'}`} 
-                 onClick={() => setPreviewTheme('light')}>
-              <div className="w-full h-16 bg-white border border-gray-200 rounded-lg mb-2 flex items-center justify-center shadow-sm">
-                <div className="w-8 h-8 bg-gray-100 rounded border"></div>
-              </div>
-              <span className="text-xs text-gray-600">☀️ {t('settings.lightTheme')}</span>
-            </div>
-            <div className={`text-center cursor-pointer p-2 rounded-lg border ${previewTheme === 'dark' ? 'ring-2 ring-blue-500' : 'border-gray-200'}`}
-                 onClick={() => setPreviewTheme('dark')}>
-              <div className="w-full h-16 bg-gray-800 border border-gray-600 rounded-lg mb-2 flex items-center justify-center shadow-sm">
-                <div className="w-8 h-8 bg-gray-700 rounded border border-gray-600"></div>
-              </div>
-              <span className="text-xs text-gray-600">🌙 {t('settings.darkTheme')}</span>
-            </div>
-            <div className={`text-center cursor-pointer p-2 rounded-lg border ${previewTheme === 'auto' ? 'ring-2 ring-blue-500' : 'border-gray-200'}`}
-                 onClick={() => setPreviewTheme('auto')}>
-              <div className="w-full h-16 bg-gradient-to-r from-white to-gray-800 border border-gray-300 rounded-lg mb-2 flex items-center justify-center shadow-sm">
-                <div className="w-8 h-8 bg-gray-400 rounded border"></div>
-              </div>
-              <span className="text-xs text-gray-600">🔄 {t('settings.autoTheme')}</span>
-            </div>
-          </div>
-          <p className="form-description mt-2">{t('settings.themePreviewDescription')}</p>
-        </div>
-
-        {/* Current vs Preview Indicator */}
-        {(previewTheme !== currentTheme || previewLanguage !== currentLanguage || previewNotifications !== currentNotifications) && (
-          <div className="form-group">
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-              <div className="flex items-center gap-2">
-                <div className="text-blue-500">ℹ️</div>
-                <div>
-                  <p className="text-sm font-medium text-blue-800">{t('settings.unsavedChanges')}</p>
-                  <p className="text-xs text-blue-600">
-                    {t('settings.theme')}: {currentTheme} → {previewTheme} | 
-                    {t('settings.language')}: {currentLanguage} → {previewLanguage} | 
-                    {t('settings.notifications')}: {currentNotifications ? t('common.on') : t('common.off')} → {previewNotifications ? t('common.on') : t('common.off')}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Accessibility Settings */}
       <div className="settings-section">
-        <h3>♿ Accessibility</h3>
+        <h3>{t('settings.accessibility')}</h3>
         <div className="form-group">
           <label className="flex items-center gap-3">
             <input
@@ -299,9 +208,9 @@ export default function Settings() {
               defaultChecked={false}
               className="w-4 h-4"
             />
-            <span className="form-label mb-0">High Contrast Mode</span>
+            <span className="form-label mb-0">{t('settings.highContrastMode')}</span>
           </label>
-          <p className="form-description">Increase contrast for better visibility</p>
+          <p className="form-description">{t('settings.highContrastDescription')}</p>
         </div>
         
         <div className="form-group">
@@ -311,26 +220,26 @@ export default function Settings() {
               defaultChecked={false}
               className="w-4 h-4"
             />
-            <span className="form-label mb-0">Reduce Motion</span>
+            <span className="form-label mb-0">{t('settings.reduceMotion')}</span>
           </label>
-          <p className="form-description">Minimize animations and transitions</p>
+          <p className="form-description">{t('settings.reduceMotionDescription')}</p>
         </div>
         
         <div className="form-group">
-          <label className="form-label">Font Size</label>
+          <label className="form-label">{t('settings.fontSize')}</label>
           <select className="form-select" defaultValue="medium">
-            <option value="small">Small</option>
-            <option value="medium">Medium</option>
-            <option value="large">Large</option>
-            <option value="extra-large">Extra Large</option>
+            <option value="small">{t('settings.fontSizeSmall')}</option>
+            <option value="medium">{t('settings.fontSizeMedium')}</option>
+            <option value="large">{t('settings.fontSizeLarge')}</option>
+            <option value="extra-large">{t('settings.fontSizeExtraLarge')}</option>
           </select>
-          <p className="form-description">Adjust text size for better readability</p>
+          <p className="form-description">{t('settings.fontSizeDescription')}</p>
         </div>
       </div>
 
       {/* Integrations */}
       <div className="settings-section">
-        <h3>🔌 Integrations</h3>
+        <h3>{t('settings.integrations')}</h3>
         <div className="form-group">
           <label className="flex items-center gap-3">
             <input
@@ -339,14 +248,14 @@ export default function Settings() {
               onChange={(e) => updateSettings('integrations', 'githubEnabled', e.target.checked)}
               className="w-4 h-4"
             />
-            <span className="form-label mb-0">Enable GitHub Integration</span>
+            <span className="form-label mb-0">{t('settings.githubIntegration')}</span>
           </label>
-          <p className="form-description">Connect with GitHub to detect issue and PR references</p>
+          <p className="form-description">{t('settings.githubIntegrationDescription')}</p>
         </div>
         
         {settings.integrations.githubEnabled && (
           <div className="form-group">
-            <label className="form-label">GitHub Personal Access Token</label>
+            <label className="form-label">{t('settings.githubToken')}</label>
             <input
               type="password"
               className="form-input"
@@ -354,7 +263,7 @@ export default function Settings() {
               onChange={(e) => updateSettings('integrations', 'githubToken', e.target.value)}
               placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
             />
-            <p className="form-description">Required for private repository access</p>
+            <p className="form-description">{t('settings.githubTokenDescription')}</p>
           </div>
         )}
         
@@ -366,14 +275,14 @@ export default function Settings() {
               onChange={(e) => updateSettings('integrations', 'slackEnabled', e.target.checked)}
               className="w-4 h-4"
             />
-            <span className="form-label mb-0">Enable Slack Notifications</span>
+            <span className="form-label mb-0">{t('settings.slackIntegration')}</span>
           </label>
-          <p className="form-description">Send meeting summaries to Slack</p>
+          <p className="form-description">{t('settings.slackIntegrationDescription')}</p>
         </div>
         
         {settings.integrations.slackEnabled && (
           <div className="form-group">
-            <label className="form-label">Slack Webhook URL</label>
+            <label className="form-label">{t('settings.slackWebhook')}</label>
             <input
               type="url"
               className="form-input"
@@ -387,9 +296,9 @@ export default function Settings() {
 
       {/* API Debug Section */}
       <div className="settings-section">
-        <h3>🔧 API Debugging & Testing</h3>
+        <h3>{t('settings.apiDebugging')}</h3>
         <p className="text-sm text-gray-600 mb-4">
-          Test VoiceLink API endpoints and complete workflows to diagnose issues.
+          {t('settings.apiDebuggingDescription')}
         </p>
         
         <div className="space-y-6">
@@ -397,38 +306,6 @@ export default function Settings() {
           <APIDebugger />
           <EndpointTester />
         </div>
-      </div>
-
-      {/* Action Buttons */}
-      <div className="flex justify-between">
-        <button
-          onClick={() => {
-            setPreviewTheme(currentTheme);
-            setPreviewLanguage(currentLanguage);
-            setPreviewNotifications(currentNotifications);
-          }}
-          className="btn btn-secondary"
-          disabled={isSaving}
-        >
-          🔄 {t('common.reset')}
-        </button>
-        
-        <button
-          onClick={handleSave}
-          disabled={isSaving || (previewTheme === currentTheme && previewLanguage === currentLanguage && previewNotifications === currentNotifications)}
-          className="btn btn-primary"
-        >
-          {isSaving ? (
-            <>
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-              {t('common.saving')}
-            </>
-          ) : (
-            <>
-              💾 {t('common.save')}
-            </>
-          )}
-        </button>
       </div>
     </div>
   );

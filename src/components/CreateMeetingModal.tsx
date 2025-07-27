@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { type MeetingCreateRequest } from '../services/api';
+import { useTranslation } from '../hooks/useTranslation';
 
 interface CreateMeetingModalProps {
   onSubmit: (data: MeetingCreateRequest) => void;
@@ -7,6 +8,7 @@ interface CreateMeetingModalProps {
 }
 
 export default function CreateMeetingModal({ onSubmit, onClose }: CreateMeetingModalProps) {
+  const { t } = useTranslation();
   const [formData, setFormData] = useState<MeetingCreateRequest>({
     title: '',
     participants: [],
@@ -21,15 +23,15 @@ export default function CreateMeetingModal({ onSubmit, onClose }: CreateMeetingM
     const newErrors: Record<string, string> = {};
 
     if (!formData.title.trim()) {
-      newErrors.title = 'Meeting title is required';
+      newErrors.title = t('createMeeting.titleRequired');
     }
 
     if (formData.title.trim().length < 3) {
-      newErrors.title = 'Meeting title must be at least 3 characters';
+      newErrors.title = t('createMeeting.titleMinLength');
     }
 
     if (participantInput.trim() && !isValidEmail(participantInput.trim())) {
-      newErrors.participant = 'Please enter a valid email address';
+      newErrors.participant = t('createMeeting.invalidEmail');
     }
 
     setErrors(newErrors);
@@ -66,12 +68,12 @@ export default function CreateMeetingModal({ onSubmit, onClose }: CreateMeetingM
     }
 
     if (!isValidEmail(email)) {
-      setErrors({ ...errors, participant: 'Please enter a valid email address' });
+      setErrors({ ...errors, participant: t('createMeeting.invalidEmail') });
       return;
     }
 
     if (formData.participants.includes(email)) {
-      setErrors({ ...errors, participant: 'This participant is already added' });
+      setErrors({ ...errors, participant: t('createMeeting.participantExists') });
       return;
     }
 
@@ -109,7 +111,7 @@ export default function CreateMeetingModal({ onSubmit, onClose }: CreateMeetingM
       <div className="modal-content">
         {/* Modal Header */}
         <div className="modal-header">
-          <h3 className="modal-title">📅 Create New Meeting</h3>
+          <h3 className="modal-title">📅 {t('meetings.createMeeting')}</h3>
           <button 
             onClick={onClose}
             className="modal-close"
@@ -126,7 +128,7 @@ export default function CreateMeetingModal({ onSubmit, onClose }: CreateMeetingM
             {/* Meeting Title */}
             <div className="form-group">
               <label className="form-label">
-                Meeting Title <span className="text-red-500">*</span>
+                {t('meetings.title')} <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
@@ -138,7 +140,7 @@ export default function CreateMeetingModal({ onSubmit, onClose }: CreateMeetingM
                     setErrors({ ...errors, title: '' });
                   }
                 }}
-                placeholder="Enter meeting title..."
+                placeholder={t('createMeeting.titlePlaceholder')}
                 required
                 autoFocus
               />
@@ -149,13 +151,13 @@ export default function CreateMeetingModal({ onSubmit, onClose }: CreateMeetingM
 
             {/* Description */}
             <div className="form-group">
-              <label className="form-label">Description</label>
+              <label className="form-label">{t('createMeeting.description')}</label>
               <textarea
                 className="form-textarea"
                 rows={3}
                 value={formData.description}
                 onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                placeholder="Optional meeting description..."
+                placeholder={t('createMeeting.descriptionPlaceholder')}
               />
               <div className="form-description">
                 Provide additional context or agenda for the meeting
@@ -234,7 +236,7 @@ export default function CreateMeetingModal({ onSubmit, onClose }: CreateMeetingM
               className="btn btn-secondary"
               disabled={isSubmitting}
             >
-              Cancel
+              {t('common.cancel')}
             </button>
             <button 
               type="submit" 
@@ -248,7 +250,7 @@ export default function CreateMeetingModal({ onSubmit, onClose }: CreateMeetingM
                 </>
               ) : (
                 <>
-                  📅 Create Meeting
+                  📅 {t('meetings.createMeeting')}
                 </>
               )}
             </button>
