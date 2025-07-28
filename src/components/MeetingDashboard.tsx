@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { VoiceLinkAPI, type MeetingResponse, type MeetingCreateRequest } from '../services/api';
 import type { Meeting } from '../types';
 import { useTheme } from '../contexts/ThemeContext';
-import { useTranslation } from '../hooks/useTranslation';
+import { useTranslation } from '../utils/translations';
 import CreateMeetingModal from './CreateMeetingModal';
 import MeetingDetailsModal from './MeetingDetailsModal';
 
@@ -17,7 +17,8 @@ export default function MeetingDashboard({
   onNavigateToMeeting, 
   onNavigateToChat 
 }: MeetingDashboardProps) {
-  const { t } = useTranslation();
+  const { language } = useTheme();
+  const { t } = useTranslation(language);
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -218,7 +219,7 @@ export default function MeetingDashboard({
           <h3 className="text-lg font-medium text-gray-900 mb-2">{t('meetings.noMeetingsFound')}</h3>
           <p className="text-gray-500 mb-4">
             {filter 
-              ? t('meetings.noFilteredMeetings', { filter: t(`meetings.${filter}`) || filter })
+              ? `${t('meetings.noFilteredMeetings')} ${t(`meetings.${filter}`) || filter}`
               : t('meetings.createFirstMeeting')
             }
           </p>
@@ -254,7 +255,8 @@ interface MeetingCardProps {
 }
 
 function MeetingCard({ meeting, onStart, onEnd, onPause, onResume, onSelectMeeting, onNavigateToMeeting, onNavigateToChat }: MeetingCardProps) {
-  const { t } = useTranslation();
+  const { language } = useTheme();
+  const { t } = useTranslation(language);
   const [showDetails, setShowDetails] = useState(false);
   const [meetingDetails, setMeetingDetails] = useState<any>(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
