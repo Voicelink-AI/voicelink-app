@@ -183,6 +183,15 @@ export default function MeetingDetailView({ meetingId, isModal = false, onClose 
   const [currentAudioTime, setCurrentAudioTime] = useState(0);
   const [uploadedAudioUrl, setUploadedAudioUrl] = useState<string | null>(null);
 
+  const sections = [
+    { id: 'overview', label: 'Overview' },
+    { id: 'audio', label: 'Audio' },
+    { id: 'transcript', label: 'Transcript' },
+    { id: 'analytics', label: 'Analytics' },
+    { id: 'insights', label: 'AI Insights' },
+    { id: 'qa', label: 'Q&A' }
+  ];
+
   useEffect(() => {
     loadMeetingData();
   }, [meetingId]);
@@ -247,222 +256,51 @@ export default function MeetingDetailView({ meetingId, isModal = false, onClose 
       setLoading(true);
       setError(null);
 
-      // Load enhanced meeting details
-      console.log('MeetingDetailView: Calling API to get enhanced meeting:', meetingId);
-      const meetingData = await VoiceLinkAPI.getMeetingWithEnhancedData(meetingId);
-      console.log('MeetingDetailView: Received enhanced meeting data:', meetingData);
+      // Load meeting details from your backend
+      const response = await fetch(`http://localhost:8000/api/v1/meetings/${meetingId}`);
+      if (!response.ok) {
+        throw new Error('Meeting not found');
+      }
+      const meetingData = await response.json();
+      console.log('MeetingDetailView: Received meeting data:', meetingData);
       setMeeting(meetingData);
 
       // Set audio URL if available
-      if (meetingData.audio_info?.url) {
-        setAudioUrl(meetingData.audio_info.url);
-      } else {
-        // Try to get audio stream URL
-        try {
-          const audioStreamUrl = await VoiceLinkAPI.getAudioStream(meetingId);
-          setAudioUrl(audioStreamUrl);
-        } catch (err) {
-          console.log('Audio stream not available:', err);
-        }
+      if (meetingData.audio_url) {
+        setAudioUrl(meetingData.audio_url);
       }
 
-      // Try to load additional data (these might return 501/404 if not implemented)
+      // Load transcript from meeting data
+      if (meetingData.transcript && meetingData.speakers) {
+        const segments: TranscriptSegment[] = [];
+        meetingData.speakers.forEach((speaker: any) => {
+          if (Array.isArray(speaker.segments)) {
+            speaker.segments.forEach((seg: any) => {
+              segments.push({
+                speaker: speaker.speaker_id,
+                text: seg.text,
+                start_time: seg.timestamp ? parseTimestamp(seg.timestamp) : 0,
+                end_time: seg.timestamp ? parseTimestamp(seg.timestamp) + 5 : 0,
+                confidence: seg.confidence || 0.95,
+              });
+            });
+          }
+        });
+        setTranscript(segments);
+      }
+
+      // Try to load additional data
       await Promise.allSettled([
-        loadTranscript(),
-        loadAIInsights(),
-        loadCodeContext(),
-        loadAnalytics(),
+        //loadAIInsights(),
+        //loadCodeContext(),
+        //loadAnalytics(),
       ]);
 
     } catch (err) {
       console.error('MeetingDetailView: Failed to load meeting data:', err);
-      console.error('MeetingDetailView: Error details:', {
-        message: err instanceof Error ? err.message : 'Unknown error',
-        meetingId: meetingId,
-        type: typeof err
-      });
       setError(err instanceof Error ? err.message : 'Failed to load meeting data');
     } finally {
-      console.log('MeetingDetailView: Finished loading, setting loading to false');
       setLoading(false);
-    }
-  };
-
-  const loadTranscript = async () => {
-    try {
-      // This endpoint might not be implemented yet
-      const response = await fetch(`http://localhost:8000/api/v1/meetings/${meetingId}/transcript`);
-      if (response.ok) {
-        const data = await response.json();
-        setTranscript(data.segments || []);
-      }
-    } catch (err) {
-      console.log('Transcript not available yet');
-      // Set placeholder data
-      setTranscript([
-        {
-          speaker: "Speaker 1",
-          text: "Welcome everyone to today's meeting. Let's start by reviewing the current progress on the VoiceLink project.",
-          start_time: 0,
-          end_time: 5.2,
-          confidence: 0.95
-        },
-        {
-          speaker: "Speaker 2", 
-          text: "Thanks for organizing this. I've been working on the API endpoints and have most of them ready for testing.",
-          start_time: 5.5,
-          end_time: 12.1,
-          confidence: 0.92
-        },
-        {
-          speaker: "Speaker 1",
-          text: "Great! Can you walk us through the status of the transcript processing feature?",
-          start_time: 12.5,
-          end_time: 17.8,
-          confidence: 0.88
-        }
-      ]);
-    }
-  };
-
-  const loadAIInsights = async () => {
-    try {
-      const response = await fetch(`http://localhost:8000/api/v1/analytics/meetings/${meetingId}/insights`);
-      if (response.ok) {
-        const data = await response.json();
-        setAIInsights(data);
-      }
-    } catch (err) {
-      console.log('AI insights not available yet');
-      // Set placeholder data
-      setAIInsights({
-        summary: "This meeting focused on the development of VoiceLink's core features, including API endpoints, transcript processing, and user interface improvements. The team discussed current progress, upcoming milestones, and technical challenges.",
-        action_items: [
-          "Complete API endpoint testing by end of week",
-          "Implement transcript processing with speaker identification", 
-          "Review and update frontend meeting detail views",
-          "Schedule follow-up meeting for next Friday"
-        ],
-        technical_requirements: [
-          "WebSocket connection for real-time transcript updates",
-          "Speaker diarization accuracy improvements",
-          "Integration with blockchain verification system",
-          "Performance optimization for large meeting files"
-        ],
-        key_topics: [
-          "API Development",
-          "Transcript Processing", 
-          "User Interface",
-          "Performance Optimization",
-          "Testing Strategy"
-        ],
-        sentiment_analysis: {
-          positive: 0.7,
-          neutral: 0.25,
-          negative: 0.05
-        }
-      });
-    }
-  };
-
-  const loadCodeContext = async () => {
-    try {
-      const response = await fetch(`http://localhost:8000/api/v1/meetings/${meetingId}/code-context`);
-      if (response.ok) {
-        const data = await response.json();
-        setCodeContext(data);
-      }
-    } catch (err) {
-      console.log('Code context not available yet');
-      // Set placeholder data
-      setCodeContext({
-        github_references: [
-          {
-            type: 'issue',
-            url: 'https://github.com/Voicelink-AI/voicelink-core/issues/42',
-            title: 'Implement transcript processing API',
-            status: 'in_progress'
-          },
-          {
-            type: 'pr',
-            url: 'https://github.com/Voicelink-AI/voicelink-app/pull/18',
-            title: 'Add meeting detail view components',
-            status: 'draft'
-          },
-          {
-            type: 'commit',
-            url: 'https://github.com/Voicelink-AI/voicelink-core/commit/abc123',
-            title: 'Add analytics endpoints for meeting insights'
-          }
-        ],
-        file_mentions: [
-          {
-            filename: 'src/services/api.ts',
-            line_number: 245,
-            context: 'Meeting API endpoints'
-          },
-          {
-            filename: 'src/components/MeetingDetailView.tsx',
-            context: 'Meeting detail UI components'
-          },
-          {
-            filename: 'requirements.txt',
-            context: 'Python dependencies for audio processing'
-          }
-        ],
-        technical_terms: [
-          'WebSocket', 'Speaker Diarization', 'Transcript Processing', 
-          'API Endpoints', 'Real-time Updates', 'Blockchain Verification'
-        ]
-      });
-    }
-  };
-
-  const loadAnalytics = async () => {
-    try {
-      const analyticsData = await VoiceLinkAPI.getMeetingAnalytics(meetingId);
-      setAnalytics(analyticsData);
-    } catch (err) {
-      console.log('Analytics not available yet, using placeholder data');
-      // This will use the mock data from the API service
-      setAnalytics(null);
-    }
-  };
-
-  const handleAskQuestion = async () => {
-    if (!newQuestion.trim() || isAskingQuestion) return;
-
-    setIsAskingQuestion(true);
-    const questionId = Date.now().toString();
-
-    try {
-      // This might return 501 if not implemented
-      const response = await VoiceLinkAPI.queryMeeting(meetingId, newQuestion);
-      
-      const newMessage: QAMessage = {
-        id: questionId,
-        question: newQuestion,
-        answer: response.response,
-        confidence: response.confidence,
-        timestamp: new Date().toISOString()
-      };
-
-      setQAMessages(prev => [...prev, newMessage]);
-      setNewQuestion('');
-    } catch (err) {
-      // Show placeholder response if endpoint not implemented
-      const newMessage: QAMessage = {
-        id: questionId,
-        question: newQuestion,
-        answer: "Voice Q&A feature is not yet implemented. This will allow you to ask questions about the meeting content and get AI-powered answers based on the transcript and context.",
-        confidence: 0.0,
-        timestamp: new Date().toISOString()
-      };
-
-      setQAMessages(prev => [...prev, newMessage]);
-      setNewQuestion('');
-    } finally {
-      setIsAskingQuestion(false);
     }
   };
 
@@ -504,96 +342,35 @@ export default function MeetingDetailView({ meetingId, isModal = false, onClose 
     return 0;
   }
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'active': return 'bg-green-100 text-green-800';
-      case 'scheduled': return 'bg-blue-100 text-blue-800';
-      case 'paused': return 'bg-yellow-100 text-yellow-800';
-      case 'completed': return 'bg-gray-100 text-gray-800';
-      case 'cancelled': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  const formatDuration = (start: number, end: number) => {
-    return `${formatTime(start)} - ${formatTime(end)}`;
-  };
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center p-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-        <span className="ml-3 text-gray-600">Loading meeting details...</span>
-      </div>
-    );
-  }
-
-  if (error || !meeting) {
-    console.log('MeetingDetailView: Showing error state. Error:', error, 'Meeting:', meeting, 'MeetingId:', meetingId);
-    return (
-      <div className="text-center p-8">
-        <div className="text-4xl mb-4">⚠️</div>
-        <h3 className="text-lg font-medium text-gray-900 mb-2">Error Loading Meeting</h3>
-        <p className="text-gray-500 mb-4">{error || 'Meeting not found'}</p>
-        <div className="text-xs text-gray-400 mb-4">
-          Meeting ID: {meetingId}<br/>
-          Error: {error}<br/>
-          Meeting Data: {meeting ? 'Available' : 'Not available'}
-        </div>
-        {onClose && (
-          <button onClick={onClose} className="btn btn-secondary">
-            Close
-          </button>
-        )}
-      </div>
-    );
-  }
-
-  const sections = [
-    { id: 'overview', label: '📋 Overview', icon: '📋' },
-    { id: 'audio', label: '🎵 Audio', icon: '🎵' },
-    { id: 'transcript', label: '📝 Transcript', icon: '📝' },
-    { id: 'ai-insights', label: '🤖 AI Insights', icon: '🤖' },
-    { id: 'analytics', label: '📊 Analytics', icon: '📊' },
-    { id: 'code-context', label: '💻 Code Context', icon: '💻' },
-    { id: 'qa', label: '💬 Voice Q&A', icon: '💬' },
-    { id: 'blockchain', label: '🔗 Blockchain', icon: '🔗' },
-  ];
-
   const containerClass = isModal 
-    ? "modal-overlay" 
+    ? "" 
     : "min-h-screen bg-gray-50 py-8";
 
   const contentClass = isModal 
-    ? "modal-content max-w-6xl" 
+    ? "" 
     : "max-w-6xl mx-auto bg-white rounded-lg shadow-sm";
 
+  function formatDuration(start_time: number, end_time: number): string {
+    const formatTime = (time: number) => {
+      const minutes = Math.floor(time / 60);
+      const seconds = Math.floor(time % 60);
+      return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    };
+    
+    return `${formatTime(start_time)} - ${formatTime(end_time)}`;
+  }
+
   return (
-    <div className={containerClass} onClick={isModal ? (e: React.MouseEvent) => {
-      if (e.target === e.currentTarget && onClose) onClose();
-    } : undefined}>
+    <div className={containerClass}>
       <div className={contentClass}>
-        {/* Header */}
-        <div className="modal-header border-b">
-          <h1 className="text-2xl font-bold text-gray-900">
-            📋 {meeting.title}
-          </h1>
-          {isModal && onClose && (
-            <button 
-              onClick={onClose}
-              className="modal-close"
-              aria-label="Close modal"
-            >
-              ✕
-            </button>
-          )}
-        </div>
+        {/* Header - only show if not in modal */}
+        {!isModal && (
+          <div className="border-b p-6">
+            <h1 className="text-2xl font-bold text-gray-900">
+              📋 {meeting?.title || 'Meeting Details'}
+            </h1>
+          </div>
+        )}
 
         {/* Navigation Tabs */}
         <div className="border-b border-gray-200">
@@ -616,6 +393,7 @@ export default function MeetingDetailView({ meetingId, isModal = false, onClose 
 
         {/* Content */}
         <div className="p-6">
+          {/* Overview Section */}
           {activeSection === 'overview' && (
             <div className="space-y-6">
               {/* Audio Player */}
@@ -628,109 +406,10 @@ export default function MeetingDetailView({ meetingId, isModal = false, onClose 
                   />
                 </div>
               )}
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Meeting Information</h3>
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">Meeting ID</label>
-                      <p className="text-gray-900 font-mono text-sm">{meeting.id}</p>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">Status</label>
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(meeting.status)}`}>
-                        {meeting.status}
-                      </span>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">Participants</label>
-                      <p className="text-gray-900">{meeting.participants_count} participants</p>
-                    </div>
-                    {meeting.audio_info && (
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Audio Info</label>
-                        <p className="text-gray-900">
-                          Duration: {Math.floor(meeting.audio_info.duration / 60)}:{(meeting.audio_info.duration % 60).toFixed(0).padStart(2, '0')} | 
-                          Format: {meeting.audio_info.format} | 
-                          Size: {(meeting.audio_info.file_size / 1024 / 1024).toFixed(1)} MB
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Timeline & Analytics</h3>
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">Created</label>
-                      <p className="text-gray-900">{new Date(meeting.createdAt).toLocaleString()}</p>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">Duration</label>
-                      <p className="text-gray-900">{Math.floor(meeting.duration / 60)} minutes</p>
-                    </div>
-                    {meeting.analytics && (
-                      <>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">Sentiment Score</label>
-                          <p className="text-gray-900">{(meeting.analytics.sentiment_score * 100).toFixed(1)}%</p>
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">Engagement Score</label>
-                          <p className="text-gray-900">{(meeting.analytics.engagement_score * 100).toFixed(1)}%</p>
-                        </div>
-                      </>
-                    )}
-                    {meeting.processing_info && (
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Processing Status</label>
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                          meeting.processing_info.status === 'completed' ? 'bg-green-100 text-green-800' :
-                          meeting.processing_info.status === 'processing' ? 'bg-yellow-100 text-yellow-800' :
-                          meeting.processing_info.status === 'failed' ? 'bg-red-100 text-red-800' :
-                          'bg-gray-100 text-gray-800'
-                        }`}>
-                          {meeting.processing_info.status}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Participants</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {meeting.participants?.length > 0 ? (
-                    meeting.participants.map((participant: any, index: number) => (
-                      <div key={index} className="bg-gray-50 rounded-lg p-3">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white text-sm font-medium">
-                            {(typeof participant === 'string' ? participant : participant.email)?.charAt(0).toUpperCase()}
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium text-gray-900">
-                              {typeof participant === 'string' ? participant : participant.email}
-                            </p>
-                            {participant.speaking_time && (
-                              <p className="text-xs text-gray-500">
-                                Speaking time: {Math.round(participant.speaking_time / 60)}m
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-sm text-gray-500 col-span-full">No participants listed</p>
-                  )}
-                </div>
-              </div>
             </div>
           )}
 
+          {/* Audio Section */}
           {activeSection === 'audio' && (
             <div className="space-y-6">
               <h3 className="text-lg font-semibold text-gray-900">Audio Recording</h3>
@@ -744,9 +423,9 @@ export default function MeetingDetailView({ meetingId, isModal = false, onClose 
                   type="file"
                   accept="audio/wav"
                   onChange={handleAudioUpload}
-                  className="form-input"
+                  className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
                 />
-                {error && <div className="text-red-600 mt-2">{error}</div>}
+                {error && <div className="text-red-600 mt-2 text-sm">{error}</div>}
               </div>
 
               {(uploadedAudioUrl || audioUrl) ? (
@@ -755,7 +434,6 @@ export default function MeetingDetailView({ meetingId, isModal = false, onClose 
                     audioUrl={uploadedAudioUrl || audioUrl!} 
                     onTimeUpdate={setCurrentAudioTime}
                   />
-                  {/* ...existing audio info... */}
                 </div>
               ) : (
                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-center">
@@ -769,6 +447,7 @@ export default function MeetingDetailView({ meetingId, isModal = false, onClose 
             </div>
           )}
 
+          {/* Transcript Section */}
           {activeSection === 'transcript' && (
             <div className="space-y-6">
               <div className="flex items-center justify-between">
@@ -825,47 +504,18 @@ export default function MeetingDetailView({ meetingId, isModal = false, onClose 
               ) : (
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 text-center">
                   <div className="text-4xl mb-4">📝</div>
-                  <h4 className="font-medium text-gray-900 mb-2">Transcript Processing</h4>
+                  <h4 className="font-medium text-gray-900 mb-2">No Transcript Available</h4>
                   <p className="text-sm text-gray-600 mb-4">
-                    Transcript processing with speaker identification is being implemented. 
-                    This will show a detailed, multi-speaker transcript of the meeting.
+                    The transcript for this meeting is not available or may still be processing.
                   </p>
                   <div className="text-xs text-gray-500">
-                    Coming soon: Real-time transcript updates, speaker diarization, and confidence scores
+                    Upload a new audio file above to generate a transcript.
                   </div>
                 </div>
               )}
             </div>
           )}
-
-          {/* Other sections remain unchanged */}
         </div>
-
-        {/* Footer */}
-        {isModal && (
-          <div className="modal-footer border-t">
-            <button 
-              onClick={() => setActiveSection('qa')}
-              className="btn btn-primary"
-            >
-              💬 Ask Questions
-            </button>
-            <button 
-              onClick={() => setActiveSection('blockchain')}
-              className="btn btn-secondary"
-            >
-              🔗 Blockchain
-            </button>
-            {onClose && (
-              <button 
-                onClick={onClose}
-                className="btn btn-secondary"
-              >
-                Close
-              </button>
-            )}
-          </div>
-        )}
       </div>
     </div>
   );

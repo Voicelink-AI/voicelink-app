@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { MeetingResult, ChatMessage } from '../types';
+import { type MeetingResult, type ChatMessage } from '../types';
 
 const API_BASE_URL = 'http://localhost:8000';
 
