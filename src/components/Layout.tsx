@@ -21,6 +21,7 @@ export default function Layout({ children, currentPage, onNavigate }: LayoutProp
     { id: 'analytics', name: t('nav.analytics'), icon: '📊' },
     { id: 'chat', name: t('nav.chat'), icon: '💬' },
     { id: 'system-monitor', name: t('nav.systemMonitor'), icon: '🔧' },
+    { id: 'transcript-tester', name: 'Transcript Tester', icon: '🧪' },
     { id: 'settings', name: t('nav.settings'), icon: '⚙️' },
   ];
 

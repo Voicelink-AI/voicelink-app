@@ -38,6 +38,59 @@ export interface AudioProcessResponse {
   error: string;
 }
 
+// New structured transcript interfaces
+export interface TranscriptSegmentData {
+  text: string;
+  start_time: number;
+  end_time: number;
+  duration: number;
+  speaker_id: string;
+  confidence: number;
+  language: string;
+  real_transcription: boolean;
+}
+
+export interface TranscriptData {
+  full_text: string;
+  segments: TranscriptSegmentData[];
+  total_segments: number;
+  total_duration: number;
+  speakers_detected: number;
+  processing_method: string;
+}
+
+export interface SpeakerSegment {
+  text: string;
+  timestamp: string;
+  confidence: number;
+  duration: number;
+}
+
+export interface SpeakerData {
+  speaker_id: string;
+  segments: SpeakerSegment[];
+  total_speaking_time: number;
+  segment_count: number;
+}
+
+export interface MeetingInfo {
+  status: string;
+  start_time: string;
+  duration_minutes: number;
+  participants: any[];
+}
+
+export interface TranscriptResponse {
+  meeting_id: string;
+  title: string;
+  transcript: TranscriptData;
+  speakers: SpeakerData[];
+  meeting_info: MeetingInfo;
+  generated_at: string;
+  source_file: string;
+  enhanced_processing: boolean;
+}
+
 export interface AnalyticsResponse {
   total_meetings: number;
   total_participants: number;
@@ -817,9 +870,19 @@ export class VoiceLinkAPI {
   }
 
   // Additional Methods
-  static async getTranscript(meetingId: string): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/meetings/${meetingId}/transcript`);
-    return response.json();
+  static async getTranscript(meetingId: string): Promise<TranscriptResponse> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/meetings/${meetingId}/transcript`);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to get transcript: ${response.status} ${response.statusText}`);
+      }
+      
+      return response.json();
+    } catch (error) {
+      console.error('Get transcript error:', error);
+      throw error;
+    }
   }
 
   static async getCodeContext(meetingId: string): Promise<any> {

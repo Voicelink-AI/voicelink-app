@@ -27,6 +27,9 @@ const AudioPlayer: React.FC<{ audioUrl: string; onTimeUpdate?: (time: number) =>
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(1);
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
   const togglePlay = () => {
     if (audioRef.current) {
@@ -121,11 +124,37 @@ const AudioPlayer: React.FC<{ audioUrl: string; onTimeUpdate?: (time: number) =>
         onLoadedMetadata={() => {
           if (audioRef.current) {
             setDuration(audioRef.current.duration);
+            setIsLoading(false);
+            setHasError(false);
           }
         }}
         onPlay={() => setIsPlaying(true)}
         onPause={() => setIsPlaying(false)}
+        onError={(e) => {
+          console.error('Audio loading error:', e);
+          setHasError(true);
+          setIsLoading(false);
+          setErrorMessage('Failed to load audio. Please check if the backend routing is working.');
+        }}
+        onLoadStart={() => {
+          setIsLoading(true);
+          setHasError(false);
+        }}
       />
+      
+      {/* Loading/Error States */}
+      {isLoading && (
+        <div className="text-sm text-gray-500 mt-2">
+          🔄 Loading audio...
+        </div>
+      )}
+      {hasError && (
+        <div className="text-sm text-red-500 mt-2">
+          ⚠️ {errorMessage}
+          <br />
+          <span className="text-xs text-gray-500">URL: {audioUrl}</span>
+        </div>
+      )}
     </div>
   );
 };
@@ -250,6 +279,92 @@ export default function MeetingDetailView({ meetingId, isModal = false, onClose 
     };
   }, [meetingId, analytics, activeSection]);
 
+  const loadTranscript = async () => {
+    try {
+      console.log('MeetingDetailView: Loading transcript for meeting:', meetingId);
+      const transcriptData = await VoiceLinkAPI.getTranscript(meetingId);
+      console.log('MeetingDetailView: Received transcript data:', transcriptData);
+      
+      // Handle the new structured response format from your backend
+      if (transcriptData && transcriptData.transcript && transcriptData.transcript.segments) {
+        const segments: TranscriptSegment[] = transcriptData.transcript.segments.map((seg: any) => ({
+          speaker: seg.speaker_id || 'Unknown Speaker',
+          text: seg.text || '',
+          start_time: seg.start_time || 0,
+          end_time: seg.end_time || (seg.start_time + seg.duration) || 5,
+          confidence: seg.confidence || 0.95,
+        }));
+        setTranscript(segments);
+        console.log('MeetingDetailView: Successfully loaded', segments.length, 'transcript segments');
+      } else if (transcriptData && transcriptData.segments) {
+        // Handle direct segments format (fallback)
+        const segments: TranscriptSegment[] = transcriptData.segments.map((seg: any) => ({
+          speaker: seg.speaker || seg.speaker_id || 'Unknown Speaker',
+          text: seg.text || seg.content || '',
+          start_time: seg.start_time || parseTimestamp(seg.timestamp) || 0,
+          end_time: seg.end_time || (seg.start_time ? seg.start_time + 5 : parseTimestamp(seg.timestamp) + 5) || 5,
+          confidence: seg.confidence || 0.95,
+        }));
+        setTranscript(segments);
+      } else if (transcriptData && transcriptData.speakers) {
+        // Handle speakers-based format (alternative fallback)
+        const segments: TranscriptSegment[] = [];
+        transcriptData.speakers.forEach((speaker: any) => {
+          if (Array.isArray(speaker.segments)) {
+            speaker.segments.forEach((seg: any) => {
+              segments.push({
+                speaker: speaker.speaker_id,
+                text: seg.text,
+                start_time: seg.timestamp ? parseTimestamp(seg.timestamp) : 0,
+                end_time: seg.timestamp ? parseTimestamp(seg.timestamp) + (seg.duration || 5) : 5,
+                confidence: seg.confidence || 0.95,
+              });
+            });
+          }
+        });
+        setTranscript(segments);
+      } else {
+        console.log('MeetingDetailView: No transcript data found in response');
+        setTranscript([]);
+      }
+    } catch (err) {
+      console.error('MeetingDetailView: Failed to load transcript from dedicated endpoint:', err);
+      // Fallback: try to get transcript from main meeting data
+      console.log('MeetingDetailView: Trying fallback - loading transcript from meeting data');
+      try {
+        const meetingResponse = await fetch(`http://localhost:8000/api/v1/meetings/${meetingId}`);
+        if (meetingResponse.ok) {
+          const meetingData = await meetingResponse.json();
+          if (meetingData.transcript && meetingData.speakers) {
+            const segments: TranscriptSegment[] = [];
+            meetingData.speakers.forEach((speaker: any) => {
+              if (Array.isArray(speaker.segments)) {
+                speaker.segments.forEach((seg: any) => {
+                  segments.push({
+                    speaker: speaker.speaker_id,
+                    text: seg.text,
+                    start_time: seg.timestamp ? parseTimestamp(seg.timestamp) : 0,
+                    end_time: seg.timestamp ? parseTimestamp(seg.timestamp) + 5 : 5,
+                    confidence: seg.confidence || 0.95,
+                  });
+                });
+              }
+            });
+            setTranscript(segments);
+            console.log('MeetingDetailView: Successfully loaded transcript from fallback');
+          } else {
+            setTranscript([]);
+          }
+        } else {
+          setTranscript([]);
+        }
+      } catch (fallbackErr) {
+        console.error('MeetingDetailView: Fallback transcript loading also failed:', fallbackErr);
+        setTranscript([]);
+      }
+    }
+  };
+
   const loadMeetingData = async () => {
     console.log('MeetingDetailView: Loading meeting data for:', meetingId);
     try {
@@ -265,32 +380,23 @@ export default function MeetingDetailView({ meetingId, isModal = false, onClose 
       console.log('MeetingDetailView: Received meeting data:', meetingData);
       setMeeting(meetingData);
 
-      // Set audio URL if available
+      // Set audio URL if available - use the correct backend endpoint
       if (meetingData.audio_url) {
-        setAudioUrl(meetingData.audio_url);
+        // If audio_url is already a full URL, use it as is
+        if (meetingData.audio_url.startsWith('http')) {
+          setAudioUrl(meetingData.audio_url);
+        } else {
+          // Otherwise, construct the correct API endpoint
+          setAudioUrl(`http://localhost:8000/api/v1/files/${meetingId}`);
+        }
+      } else {
+        // Fallback: try the files endpoint even if no audio_url in response
+        setAudioUrl(`http://localhost:8000/api/v1/files/${meetingId}`);
       }
 
-      // Load transcript from meeting data
-      if (meetingData.transcript && meetingData.speakers) {
-        const segments: TranscriptSegment[] = [];
-        meetingData.speakers.forEach((speaker: any) => {
-          if (Array.isArray(speaker.segments)) {
-            speaker.segments.forEach((seg: any) => {
-              segments.push({
-                speaker: speaker.speaker_id,
-                text: seg.text,
-                start_time: seg.timestamp ? parseTimestamp(seg.timestamp) : 0,
-                end_time: seg.timestamp ? parseTimestamp(seg.timestamp) + 5 : 0,
-                confidence: seg.confidence || 0.95,
-              });
-            });
-          }
-        });
-        setTranscript(segments);
-      }
-
-      // Try to load additional data
+      // Load transcript from dedicated endpoint
       await Promise.allSettled([
+        loadTranscript(),
         //loadAIInsights(),
         //loadCodeContext(),
         //loadAnalytics(),
@@ -396,14 +502,137 @@ export default function MeetingDetailView({ meetingId, isModal = false, onClose 
           {/* Overview Section */}
           {activeSection === 'overview' && (
             <div className="space-y-6">
-              {/* Audio Player */}
-              {audioUrl && (
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Audio Recording</h3>
-                  <AudioPlayer 
-                    audioUrl={audioUrl} 
-                    onTimeUpdate={setCurrentAudioTime}
-                  />
+              <h3 className="text-lg font-semibold text-gray-900">Meeting Overview</h3>
+              
+              {/* Meeting Info Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {/* Basic Info */}
+                <div className="bg-white rounded-lg border border-gray-200 p-4">
+                  <h4 className="text-sm font-medium text-gray-900 mb-3">📋 Meeting Details</h4>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Status:</span>
+                      <span className={`font-medium ${
+                        meeting?.status === 'completed' ? 'text-green-600' : 
+                        meeting?.status === 'active' ? 'text-blue-600' : 'text-gray-600'
+                      }`}>
+                        {meeting?.status || 'Unknown'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Created:</span>
+                      <span className="text-gray-900">
+                        {meeting?.createdAt ? new Date(meeting.createdAt).toLocaleDateString() : 'N/A'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Duration:</span>
+                      <span className="text-gray-900">
+                        {meeting?.duration ? `${Math.floor(meeting.duration / 60)} minutes` : 'N/A'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Participants */}
+                <div className="bg-white rounded-lg border border-gray-200 p-4">
+                  <h4 className="text-sm font-medium text-gray-900 mb-3">👥 Participants</h4>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-gray-600">Total Count:</span>
+                      <span className="text-lg font-semibold text-blue-600">
+                        {meeting?.participants_count || meeting?.participants?.length || 0}
+                      </span>
+                    </div>
+                    {meeting?.participants && meeting.participants.length > 0 && (
+                      <div className="mt-2">
+                        <span className="text-xs text-gray-500">Speakers:</span>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {meeting.participants.slice(0, 3).map((participant, index) => (
+                            <span key={index} className="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">
+                              {participant}
+                            </span>
+                          ))}
+                          {meeting.participants.length > 3 && (
+                            <span className="inline-block bg-gray-100 text-gray-600 text-xs px-2 py-1 rounded">
+                              +{meeting.participants.length - 3} more
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Analytics Summary */}
+                <div className="bg-white rounded-lg border border-gray-200 p-4">
+                  <h4 className="text-sm font-medium text-gray-900 mb-3">📊 Analytics</h4>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Duration:</span>
+                      <span className="text-gray-900">
+                        {analytics?.duration_minutes ? 
+                          `${analytics.duration_minutes}m` : 'N/A'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Topics:</span>
+                      <span className="text-gray-900">
+                        {analytics?.topics_discussed?.length || 0}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Action Items:</span>
+                      <span className="text-gray-900">
+                        {analytics?.action_items?.length || 0}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Transcript Summary */}
+              {transcript && transcript.length > 0 && (
+                <div className="bg-white rounded-lg border border-gray-200 p-4">
+                  <h4 className="text-sm font-medium text-gray-900 mb-3">📝 Quick Summary</h4>
+                  <p className="text-sm text-gray-600">
+                    Meeting with {meeting?.participants_count || 'unknown'} participants. 
+                    Total transcript segments: {transcript.length}.
+                  </p>
+                </div>
+              )}
+
+              {/* Action Items & Key Points */}
+              {analytics && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Action Items */}
+                  {analytics.action_items && analytics.action_items.length > 0 && (
+                    <div className="bg-white rounded-lg border border-gray-200 p-4">
+                      <h4 className="text-sm font-medium text-gray-900 mb-3">✅ Action Items</h4>
+                      <ul className="space-y-1">
+                        {analytics.action_items.slice(0, 3).map((item, index) => (
+                          <li key={index} className="text-sm text-gray-600 flex items-start">
+                            <span className="text-blue-500 mr-2">•</span>
+                            {item.action}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Key Topics */}
+                  {analytics.topics_discussed && analytics.topics_discussed.length > 0 && (
+                    <div className="bg-white rounded-lg border border-gray-200 p-4">
+                      <h4 className="text-sm font-medium text-gray-900 mb-3">🔑 Key Topics</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {analytics.topics_discussed.slice(0, 6).map((topic, index) => (
+                          <span key={index} className="inline-block bg-gray-100 text-gray-700 text-xs px-2 py-1 rounded">
+                            {topic.topic}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -439,6 +668,13 @@ export default function MeetingDetailView({ meetingId, isModal = false, onClose 
                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-center">
                   <div className="text-4xl mb-4">🎵</div>
                   <h4 className="font-medium text-gray-900 mb-2">No Audio Recording Available</h4>
+                  <p className="text-sm text-gray-600 mb-4">
+                    Upload an audio file to process this meeting or check if the backend audio serving is working.
+                  </p>
+                  <div className="text-xs text-gray-500 space-y-1">
+                    <p>Expected audio endpoint: <code className="bg-gray-100 px-1 rounded">GET /api/v1/files/{meetingId}</code></p>
+                    <p>Current meeting ID: <code className="bg-gray-100 px-1 rounded">{meetingId}</code></p>
+                  </div>
                   <p className="text-sm text-gray-600">
                     Audio recording may not be available for this meeting, or it may still be processing.
                   </p>

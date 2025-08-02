@@ -9,6 +9,7 @@ import ChatInterface from './components/ChatInterface';
 import SystemMonitor from './components/SystemMonitor';
 import BlockchainVerifier from './components/BlockchainVerifier';
 import Settings from './components/Settings';
+import TranscriptTester from './components/TranscriptTester';
 import { VoiceLinkAPI } from './services/api';
 import { ThemeProvider } from './contexts/ThemeContext';
 import './App.css';
@@ -114,6 +115,8 @@ function App() {
         return <BlockchainVerifier meetingId={selectedMeetingId || undefined} />;
       case 'settings':
         return <Settings />;
+      case 'transcript-tester':
+        return <TranscriptTester />;
       default:
         return <Dashboard />;
     }
